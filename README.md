@@ -4,8 +4,8 @@
 Your content stays as plain JSON files in your own repository. Editors click on the real site
 to change text, images and videos. No database, no server to pay for, no lock-in.
 
-> **Status: early development (v0, not yet on npm).** The protocol spec and the core packages
-> are being built in the open. APIs may change until `1.0`.
+> **Status: early development (v0).** Alpha prereleases are on npm under the `next` tag
+> (`npm install @mosto-cms/next@next`); there is no stable release yet. APIs may change until `1.0`.
 
 ## Why
 

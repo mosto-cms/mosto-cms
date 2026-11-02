@@ -1,6 +1,6 @@
 {
   "name": "@mosto-cms/adapter-github",
-  "version": "0.0.0",
+  "version": "0.1.0-alpha.0",
   "description": "Mosto CMS content adapter for GitHub: atomic multi-file commits through the Git Data API, conflict detection, token or GitHub App auth.",
   "license": "MIT",
   "type": "module",
