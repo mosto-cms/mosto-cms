@@ -1,0 +1,40 @@
+{
+  "name": "@mosto-cms/adapter-github",
+  "version": "0.0.0",
+  "description": "Mosto CMS content adapter for GitHub: atomic multi-file commits through the Git Data API, conflict detection, token or GitHub App auth.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mosto-cms/mosto-cms.git",
+    "directory": "packages/adapter-github"
+  },
+  "keywords": ["cms", "git-based-cms", "github", "mosto-cms"],
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "files": ["dist"],
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@mosto-cms/core": "workspace:*"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

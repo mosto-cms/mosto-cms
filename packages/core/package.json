@@ -1,0 +1,39 @@
+{
+  "name": "@mosto-cms/core",
+  "version": "0.0.0",
+  "description": "Mosto CMS core: schema format and validation, field addressing, the field fence and the mosto-cms/1 protocol operations. No dependencies.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mosto-cms/mosto-cms.git",
+    "directory": "packages/core"
+  },
+  "keywords": ["cms", "git-based-cms", "headless-cms", "mosto-cms"],
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./schema.json": "./schema.json"
+  },
+  "files": ["dist", "schema.json"],
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./schema.json": "./schema.json"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "name": "@mosto-cms/adapter-fs",
+  "version": "0.0.0",
+  "description": "Mosto CMS content adapter for the local file system, for development.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mosto-cms/mosto-cms.git",
+    "directory": "packages/adapter-fs"
+  },
+  "keywords": ["cms", "mosto-cms"],
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "files": ["dist"],
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@mosto-cms/core": "workspace:*"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

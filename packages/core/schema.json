@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/mosto-cms/mosto-cms/main/packages/core/schema.json",
+  "title": "Mosto CMS schema (mosto-cms/1)",
+  "description": "Declares which content fields of a site can be edited. Any path not listed is refused.",
+  "type": "object",
+  "required": ["version", "locales", "collections"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 1 },
+    "site": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "url": { "type": "string" }
+      }
+    },
+    "locales": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "defaultLocale": { "type": "string", "minLength": 1 },
+    "media": {
+      "type": "object",
+      "required": ["dir", "publicPath"],
+      "additionalProperties": false,
+      "properties": {
+        "dir": { "$ref": "#/$defs/relativePath" },
+        "publicPath": { "type": "string", "pattern": "^/" },
+        "maxBytes": { "type": "integer", "minimum": 1 },
+        "accept": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "collections": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/collection" }
+    }
+  },
+  "$defs": {
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "not": { "pattern": "(^/)|(^\\.\\.?(/|$))|(/\\.\\.?(/|$))|(\\\\)|(//)" }
+    },
+    "label": {
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "type": "string" }
+        }
+      ]
+    },
+    "fieldPath": {
+      "type": "string",
+      "pattern": "^[^.]+(\\.[^.]+)*$"
+    },
+    "collection": {
+      "type": "object",
+      "required": ["key", "file", "idField", "type", "label", "fields"],
+      "additionalProperties": false,
+      "properties": {
+        "key": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$" },
+        "file": { "allOf": [{ "$ref": "#/$defs/relativePath" }, { "pattern": "\\.json$" }] },
+        "idField": { "type": "string", "minLength": 1 },
+        "type": { "enum": ["single", "list"] },
+        "label": { "$ref": "#/$defs/label" },
+        "description": { "$ref": "#/$defs/label" },
+        "titleField": { "type": "string" },
+        "fields": { "type": "array", "items": { "$ref": "#/$defs/field" } }
+      }
+    },
+    "field": {
+      "type": "object",
+      "required": ["path", "kind", "label"],
+      "additionalProperties": false,
+      "properties": {
+        "path": { "$ref": "#/$defs/fieldPath" },
+        "kind": { "enum": ["text", "multiline", "image", "video", "url", "list", "imageList"] },
+        "label": { "$ref": "#/$defs/label" },
+        "description": { "$ref": "#/$defs/label" },
+        "required": { "type": "boolean" },
+        "maxLength": { "type": "integer", "minimum": 1 },
+        "maxItems": { "type": "integer", "minimum": 1 },
+        "accept": { "type": "array", "items": { "type": "string" } },
+        "ai": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "instructions": { "type": "string" },
+            "locked": { "type": "boolean" }
+          }
+        }
+      }
+    }
+  }
+}
