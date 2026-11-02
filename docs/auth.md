@@ -48,7 +48,8 @@ MOSTO_CMS_EDITORS='[{"email":"anna@example.com","name":"Anna","passwordHash":"sc
   with the right password, until the window ends. A success resets the email counter. The
   default store is in memory: on serverless hosting each instance counts on its own, so it is
   a brake (each guess also costs a scrypt hash of about 60 ms), not a global cap. Pass a shared
-  `RateLimitStore` (Redis, KV…) for a global one. The IP comes from `X-Forwarded-For` (first
+  `RateLimitStore` (Redis, KV…) for a global one (example in
+  [getting started](getting-started.md#8-before-going-live)). The IP comes from `X-Forwarded-For` (first
   hop) or `X-Real-IP`, so it is only as trustworthy as the host's proxy.
 - **Session:** a token `mcs1.<payload>.<sig>` with `{ v: 1, sub: email, name, iat, exp, ph }`,
   default lifetime 12 hours. `ph` is an HMAC (session subkey) of the editor's password hash:

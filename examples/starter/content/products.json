@@ -2,11 +2,13 @@
   {
     "slug": "tagliatelle",
     "en": { "name": "Tagliatelle al ragù", "description": "Slow-cooked beef and pork ragù." },
+    "it": { "name": "Tagliatelle al ragù", "description": "Ragù di manzo e maiale cotto a lungo." },
     "price": "€ 14"
   },
   {
     "slug": "ravioli",
     "en": { "name": "Ricotta ravioli", "description": "Butter, sage and parmesan." },
+    "it": { "name": "Ravioli di ricotta", "description": "Burro, salvia e parmigiano." },
     "price": "€ 13"
   }
 ]

@@ -30,6 +30,8 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      - name: Install Chromium for the browser end-to-end test
+        run: pnpm exec playwright-core install --with-deps chromium
       - name: End-to-end (starter app)
         run: pnpm test:e2e
 

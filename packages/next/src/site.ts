@@ -63,6 +63,8 @@ export type MostoCmsOptions = {
   rateLimit?: RateLimitOptions;
   /** Where the admin page is mounted. Default "/admin". */
   adminPath?: string;
+  /** The `/admin` interface. */
+  admin?: AdminOptions;
   /** Where the route handler is mounted. Default "/api/mosto-cms". */
   apiPath?: string;
   /** Commit author email for writes made with a connector key. */
@@ -70,6 +72,15 @@ export type MostoCmsOptions = {
   /** Environment, default `process.env` (tests pass their own). */
   env?: Env;
   now?: () => number;
+};
+
+export type AdminOptions = {
+  /** Pages offered in visual mode, e.g. `[{ path: '/', label: 'Home' }, { path: '/menu' }]`. Default: the home page. */
+  pages?: Array<{ path: string; label?: string }>;
+  /** The "Powered by Mosto CMS" link in the admin. Default true. */
+  poweredBy?: boolean;
+  /** Force the admin language ("en" or "it"); default: the editor's browser, switchable. */
+  language?: 'en' | 'it';
 };
 
 export type MostoCmsSite = ReturnType<typeof defineMostoCms>;
@@ -164,6 +175,7 @@ export function defineMostoCms(options: MostoCmsOptions) {
   return {
     adminPath,
     apiPath,
+    admin: options.admin ?? {},
     now,
     getSchema,
     getAdapter,

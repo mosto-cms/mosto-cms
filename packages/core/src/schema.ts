@@ -81,7 +81,12 @@ export type MediaConfig = {
   publicPath: string;
   /** Max upload size in bytes (default 10 MB). */
   maxBytes?: number;
-  /** Accepted MIME types (default: common web images and mp4/webm video). */
+  /**
+   * Accepted MIME types (default: common web images and mp4/webm video).
+   * SVG is not in the default list: an SVG can carry script, and uploads are
+   * served from the site's own origin. Add "image/svg+xml" here to allow it
+   * (only for editors you trust).
+   */
   accept?: string[];
 };
 
@@ -112,7 +117,6 @@ export const DEFAULT_MEDIA: Required<MediaConfig> = {
     'image/webp',
     'image/gif',
     'image/avif',
-    'image/svg+xml',
     'video/mp4',
     'video/webm',
   ],

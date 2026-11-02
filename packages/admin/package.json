@@ -1,0 +1,52 @@
+{
+  "name": "@mosto-cms/admin",
+  "version": "0.0.0",
+  "description": "The Mosto CMS /admin interface: visual click-to-edit on the live site, forms for every field, languages side by side, history with undo and image/video uploads. React, no other dependencies.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mosto-cms/mosto-cms.git",
+    "directory": "packages/admin"
+  },
+  "keywords": ["cms", "mosto-cms", "admin", "visual-editing"],
+  "exports": {
+    ".": {
+      "mosto-cms-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@mosto-cms/core": "workspace:*",
+    "@mosto-cms/overlay": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": ">=19.0.0",
+    "react-dom": ">=19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
