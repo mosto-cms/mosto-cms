@@ -60,7 +60,7 @@ export function createMediaHandler(options: MediaHandlerOptions) {
   };
   const maxAge = options.maxAgeSeconds ?? 300;
 
-  return async function GET(_request: Request, context?: RouteContext): Promise<Response> {
+  return async function GET(_request: Request, context: RouteContext): Promise<Response> {
     const params = context?.params ? await context.params : undefined;
     let segments: string[] | undefined;
     if (params) for (const v of Object.values(params)) if (Array.isArray(v)) segments = v;

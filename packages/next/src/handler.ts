@@ -47,8 +47,12 @@ import { isAllowedOrigin, verifyConnectorKey } from '@mosto-cms/auth';
 
 import type { MostoCmsSite } from './site.js';
 
-export type RouteContext = { params?: Promise<Record<string, string | string[] | undefined>> };
-export type RouteHandler = (request: Request, context?: RouteContext) => Promise<Response>;
+/**
+ * The second argument Next.js passes to a route handler. Required in the type
+ * (Next.js 15 rejects an optional one at build time), tolerated as missing at runtime.
+ */
+export type RouteContext = { params: Promise<Record<string, string | string[] | undefined>> };
+export type RouteHandler = (request: Request, context: RouteContext) => Promise<Response>;
 
 type Caller = { access: Access; author: { name: string; email: string }; via: 'key' | 'session'; keyId?: string };
 
@@ -67,7 +71,7 @@ function errorResponse(err: unknown): Response {
 }
 
 /** The sub-route after the mount point (`[]` for the protocol itself). */
-async function subRoute(site: MostoCmsSite, request: Request, context?: RouteContext): Promise<string[]> {
+async function subRoute(site: MostoCmsSite, request: Request, context: RouteContext | undefined): Promise<string[]> {
   const params = context?.params ? await context.params : undefined;
   if (params) {
     for (const v of Object.values(params)) if (Array.isArray(v)) return v;

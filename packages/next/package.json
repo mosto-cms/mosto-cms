@@ -1,6 +1,6 @@
 {
   "name": "@mosto-cms/next",
-  "version": "0.0.0",
+  "version": "0.1.0-alpha.0",
   "description": "Mosto CMS for Next.js (App Router): the /api/mosto-cms endpoint, a live content reader with on-demand revalidation, an optional media proxy, the /admin interface and the click-to-edit overlay.",
   "license": "MIT",
   "type": "module",

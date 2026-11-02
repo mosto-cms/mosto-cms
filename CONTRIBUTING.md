@@ -101,3 +101,18 @@ last commit with `git commit --amend -s`, or all commits of the branch with
 Prefer depending on a package over copying code. If you copy or adapt code from another
 project, it must be under a compatible license (MIT, Apache-2.0, BSD, ISC), keep its copyright
 notice, and get an entry in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## Releasing (maintainers)
+
+Versions come from [changesets](https://github.com/changesets/changesets). Until `1.0` the
+packages are prereleases (`changeset pre` mode, tag `alpha`) published under the npm dist-tag
+`next`, so `npm install @mosto-cms/<package>` without a tag does not pick them up.
+
+```sh
+pnpm changeset version          # bump versions and changelogs from the pending changesets
+pnpm check && pnpm build        # guard, lint, typecheck, tests, then the dist files
+pnpm -r --filter "./packages/**" publish --tag next --access public
+```
+
+Only `dist`, `bin`, `README.md`, `LICENSE`, `CHANGELOG.md` and `package.json` are published
+(`files` in each package); `workspace:*` dependencies become the exact released versions.

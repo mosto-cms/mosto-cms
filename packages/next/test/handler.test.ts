@@ -34,7 +34,8 @@ describe('GET /api/mosto-cms', () => {
   it('finds the sub-route from the URL when mounted without params', async () => {
     const { site } = await setup();
     const h = createRouteHandlers(site);
-    const res = await h.GET(new Request(`${SITE}/api/mosto-cms/session`));
+    // No context at all (tolerated at runtime): the route comes from the URL.
+    const res = await h.GET(new Request(`${SITE}/api/mosto-cms/session`), undefined as never);
     expect((await res.json()).result).toEqual({ editor: null });
   });
 });

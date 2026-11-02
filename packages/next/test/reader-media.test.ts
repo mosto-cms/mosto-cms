@@ -117,7 +117,7 @@ describe('media proxy', () => {
   const data = { 'public/uploads/boat.png': 'PNGDATA', 'public/uploads/logo.svg': '<svg/>', 'public/uploads/notes.txt': 'x' };
   const handler = createMediaHandler({ schema, source: memorySource(data) });
   const get = (segments: string[] | undefined) =>
-    handler(new Request('https://site.example/media/x'), segments ? { params: Promise.resolve({ path: segments }) } : undefined);
+    handler(new Request('https://site.example/media/x'), segments ? { params: Promise.resolve({ path: segments }) } : (undefined as never));
 
   it('streams a committed upload with its content type', async () => {
     const res = await get(['boat.png']);

@@ -1,6 +1,6 @@
 {
   "name": "@mosto-cms/admin",
-  "version": "0.0.0",
+  "version": "0.1.0-alpha.0",
   "description": "The Mosto CMS /admin interface: visual click-to-edit on the live site, forms for every field, languages side by side, history with undo and image/video uploads. React, no other dependencies.",
   "license": "MIT",
   "type": "module",

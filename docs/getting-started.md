@@ -1,15 +1,15 @@
 # Getting started (draft)
 
-**Status:** draft. The packages are not on npm yet; until then, try the
-[`examples/starter`](../examples/starter) app inside this repository. The `npx mosto-cms init`
-command comes in a later release.
+**Status:** draft. The packages are published as alpha prereleases under the npm `next` tag
+(no stable release yet); the [`examples/starter`](../examples/starter) app in this repository
+shows a complete setup. The `npx mosto-cms init` command comes in a later release.
 
-This guide makes an existing Next.js (App Router) site editable. You need Node.js 22.
+This guide makes an existing Next.js (App Router, 15 or 16) site editable. You need Node.js 22.
 
 ## 1. Install
 
 ```sh
-npm install @mosto-cms/core @mosto-cms/auth @mosto-cms/next @mosto-cms/admin @mosto-cms/overlay @mosto-cms/adapter-fs @mosto-cms/adapter-github
+npm install @mosto-cms/core@next @mosto-cms/auth@next @mosto-cms/next@next @mosto-cms/admin@next @mosto-cms/overlay@next @mosto-cms/adapter-fs@next @mosto-cms/adapter-github@next
 ```
 
 ## 2. Put the content in JSON files
