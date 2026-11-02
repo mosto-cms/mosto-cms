@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   check:
-    name: Guard, lint, typecheck, test, build
+    name: Guard, lint, typecheck, test, build, e2e
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -30,6 +30,8 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      - name: End-to-end (starter app)
+        run: pnpm test:e2e
 
   dco:
     name: DCO sign-off

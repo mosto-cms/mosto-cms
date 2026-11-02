@@ -5,3 +5,4 @@ export {
   type GithubAppCredentials,
   type InstallationToken,
 } from './github-app.js';
+export { githubAdapterFromEnv, githubOptionsFromEnv } from './env.js';

@@ -17,6 +17,7 @@
     "typecheck": "pnpm -r --filter \"./packages/**\" run typecheck",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "pnpm --filter mosto-cms-starter build && vitest run --config vitest.e2e.config.ts",
     "lint": "eslint .",
     "guard": "node scripts/guard.mjs",
     "check": "pnpm guard && pnpm lint && pnpm typecheck && pnpm test",

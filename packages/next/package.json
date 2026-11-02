@@ -1,0 +1,61 @@
+{
+  "name": "@mosto-cms/next",
+  "version": "0.0.0",
+  "description": "Mosto CMS for Next.js (App Router): the /api/mosto-cms endpoint, a live content reader with on-demand revalidation, an optional media proxy and the /admin mount.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mosto-cms/mosto-cms.git",
+    "directory": "packages/next"
+  },
+  "keywords": ["cms", "mosto-cms", "nextjs", "git-based-cms"],
+  "exports": {
+    ".": {
+      "mosto-cms-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./admin": {
+      "mosto-cms-source": "./src/admin.tsx",
+      "types": "./dist/admin.d.ts",
+      "default": "./dist/admin.js"
+    }
+  },
+  "files": ["dist"],
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./admin": {
+        "types": "./dist/admin.d.ts",
+        "default": "./dist/admin.js"
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@mosto-cms/auth": "workspace:*",
+    "@mosto-cms/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "next": ">=15.0.0",
+    "react": ">=19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "next": "^16.4.4",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

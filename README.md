@@ -32,16 +32,18 @@ from the page. Visual-editing CMSs are usually hosted services. Mosto CMS aims a
 | [`@mosto-cms/core`](packages/core) | Schema format and validation, field addressing, the fence, the protocol operations, standard errors. No dependencies. | in progress |
 | [`@mosto-cms/adapter-github`](packages/adapter-github) | Reads and writes content through the GitHub API: atomic multi-file commits, conflict detection, token or GitHub App auth. | in progress |
 | [`@mosto-cms/adapter-fs`](packages/adapter-fs) | Local files, for development. | in progress |
-| `@mosto-cms/next` | Next.js reader, `/api/mosto-cms` endpoint, connector keys, media proxy. | planned |
+| [`@mosto-cms/next`](packages/next) | Next.js: `/api/mosto-cms` endpoint, live content reader with on-demand revalidation, media proxy, `/admin` mount. | in progress |
 | `@mosto-cms/overlay` | Click-to-edit overlay and the versioned editor `postMessage` protocol. | planned |
 | `@mosto-cms/admin` | The `/admin` UI: visual mode, forms, history and undo, uploads, side-by-side locales. | planned |
-| `@mosto-cms/auth` | Editor login with email and password, no GitHub account needed. | planned |
+| [`@mosto-cms/auth`](packages/auth) | Editor sign-in with email and password (no GitHub account), scoped and revocable connector keys. No database. | in progress |
 | `mosto-cms` (CLI) | `npx mosto-cms init` for an existing site. | planned |
 
 ## The protocol
 
 The heart of the project is the open content protocol. Read the spec in
-[`docs/protocol.md`](docs/protocol.md).
+[`docs/protocol.md`](docs/protocol.md), the credential design in [`docs/auth.md`](docs/auth.md),
+and try it with the draft [getting-started guide](docs/getting-started.md) or the
+[`examples/starter`](examples/starter) app.
 
 ## Development
 
@@ -53,7 +55,13 @@ pnpm test        # Vitest
 pnpm typecheck
 pnpm lint
 pnpm guard       # repository hygiene: no secrets, no AI/agent code
+pnpm build       # build the packages (the example apps import the built files)
+pnpm test:e2e    # build examples/starter and run its end-to-end test
 ```
+
+Inside the repository, tests and type checks read the packages' TypeScript sources through the
+`mosto-cms-source` export condition; apps (the starter, or a site using the published
+packages) read the built `dist` files.
 
 Versioning uses [changesets](https://github.com/changesets/changesets): add one with
 `pnpm changeset` in any PR that changes a published package.

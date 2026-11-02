@@ -1,0 +1,12 @@
+[
+  {
+    "slug": "tagliatelle",
+    "en": { "name": "Tagliatelle al ragù", "description": "Slow-cooked beef and pork ragù." },
+    "price": "€ 14"
+  },
+  {
+    "slug": "ravioli",
+    "en": { "name": "Ricotta ravioli", "description": "Butter, sage and parmesan." },
+    "price": "€ 13"
+  }
+]

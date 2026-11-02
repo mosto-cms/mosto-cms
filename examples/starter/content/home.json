@@ -1,0 +1,14 @@
+{
+  "id": "home",
+  "en": {
+    "hero": {
+      "title": "Fresh pasta, made every morning",
+      "subtitle": "A small kitchen in the old town.\nOpen from Tuesday to Sunday."
+    },
+    "highlights": ["Hand-rolled pasta", "Local wine", "Seasonal menu"]
+  },
+  "hero": {
+    "image": "/hero.svg"
+  },
+  "layout": { "theme": "light" }
+}

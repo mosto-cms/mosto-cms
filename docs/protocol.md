@@ -265,17 +265,48 @@ Responses always use this envelope:
 
 Clients MUST branch on `code`, never on `message`.
 
-### 4.2 Authentication (summary, specified in the Next.js integration)
+### 4.2 Authentication
 
-- **Editors** sign in to `/admin` with email and password configured for the site; no GitHub
-  account. The session is a signed, `HttpOnly`, `Secure`, `SameSite=Strict` cookie; login
-  attempts are rate limited.
-- **Connector keys** let a platform or a script call the endpoint. A key carries a scope
-  (`write`, `collections`, `actor`), is verifiable without a database (signed with the site
-  secret), and can be revoked by the site owner at any time; a revoked key gets
-  `unauthorized`, while the site and `/admin` keep working.
+Full design: [`docs/auth.md`](auth.md). In short:
+
+- **Connector keys** (`Authorization: Bearer mck1.…`) let a platform or a script call the
+  endpoint. A key carries a scope (`write`, `collections`, `actor`), is verified without a
+  database (HMAC with a subkey of the site secret), and can be revoked by the site owner at any
+  time; a revoked key gets `unauthorized` with `details.reason = "revoked"`, while the site
+  and `/admin` keep working. When an `Authorization` header is present, the request is judged
+  on it alone.
+- **Editors** sign in to `/admin` with an email and a password configured for the site; no
+  GitHub account. The session is a signed, `HttpOnly`, `SameSite=Strict` cookie (`Secure`
+  over HTTPS); sign-in attempts are rate limited. Protocol calls made with the cookie MUST be
+  `application/json` and, when the browser sends `Origin`, come from the site itself or an
+  explicitly allowed origin (`forbidden` otherwise).
+- `X-Mosto-Actor: ai` makes a caller act as AI (it can then not write `ai.locked` fields). It
+  can only lower the caller's rights.
 - The storage credentials (a GitHub token or the owner's GitHub App) stay on the site, in its
   environment. They are never returned by any operation.
+
+### 4.3 Companion routes
+
+An implementation MAY serve these next to the protocol route (the Next.js integration does):
+
+| Route | Purpose |
+|---|---|
+| `GET /api/mosto-cms` | Discovery, no auth: `{ name: "mosto-cms", protocol, auth: ["connector-key", "editor-session"] }`. |
+| `POST /api/mosto-cms/login` | Editor sign-in: JSON `{ email, password }` → `200` + cookie, `401` or `429`; or a form → `303` redirect. |
+| `POST /api/mosto-cms/logout` | Editor sign-out. |
+| `GET /api/mosto-cms/session` | `{ editor: { email, name } \| null, expiresAt? }` for the current cookie. |
+
+They use the same envelope; a locked sign-in answers `429` with code `unauthorized` and
+`details.reason = "locked"`.
+
+### 4.4 Limits
+
+- At most 500 changes per call (`too_large`).
+- The request body is limited to the base64 size of `media.maxBytes` plus 64 KB (`too_large`).
+  Hosting platforms have their own limits (about 4.5 MB on Vercel functions), so large videos
+  may need to go through a platform's storage in a later version.
+- After a successful `publish` or `revert`, the Next.js integration expires the cache of the
+  changed files and of the rendered pages, so the next visit shows the new content.
 
 ---
 
