@@ -75,6 +75,8 @@ export type DescribeResult = {
   defaultLocale: string;
   collections: Array<{ key: string; type: CollectionDef['type']; label: CollectionDef['label']; fields: number }>;
   capabilities: { history: boolean; revert: boolean; uploadAsset: boolean };
+  /** Upload limits, so a client can check a file before sending it. */
+  media: { publicPath: string; maxBytes: number; accept: string[] };
   access: { write: boolean; collections: string[] | 'all'; actor: 'human' | 'ai' };
   operations: string[];
 };
@@ -200,6 +202,10 @@ export function createCms(options: CmsOptions) {
         revert: typeof adapter.history === 'function' && typeof adapter.getRevision === 'function',
         uploadAsset: access.write,
       },
+      media: (() => {
+        const m = mediaConfig(schema);
+        return { publicPath: m.publicPath, maxBytes: m.maxBytes, accept: m.accept };
+      })(),
       access: {
         write: access.write,
         collections: access.collections ?? 'all',
@@ -214,6 +220,7 @@ export function createCms(options: CmsOptions) {
     type: CollectionDef['type'];
     label: CollectionDef['label'];
     idField: string;
+    file: string;
     fields: FieldDef[];
   }> {
     const cols = input.collection
@@ -224,6 +231,7 @@ export function createCms(options: CmsOptions) {
       type: c.type,
       label: c.label,
       idField: c.idField,
+      file: c.file,
       fields: c.fields,
     }));
   }

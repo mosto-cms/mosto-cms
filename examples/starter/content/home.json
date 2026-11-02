@@ -7,8 +7,16 @@
     },
     "highlights": ["Hand-rolled pasta", "Local wine", "Seasonal menu"]
   },
+  "it": {
+    "hero": {
+      "title": "Pasta fresca, fatta ogni mattina",
+      "subtitle": "Una piccola cucina nel centro storico.\nAperti da martedì a domenica."
+    },
+    "highlights": ["Pasta tirata a mano", "Vino del territorio", "Menu di stagione"]
+  },
   "hero": {
     "image": "/hero.svg"
   },
+  "gallery": ["/gallery/kitchen.svg", "/gallery/table.svg", "/gallery/wine.svg"],
   "layout": { "theme": "light" }
 }

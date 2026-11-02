@@ -16,3 +16,4 @@ export {
   type Editor,
   type KeyScope,
 } from '@mosto-cms/auth';
+export { mostoField, type EntryRef, type MostoFieldAttributes } from '@mosto-cms/overlay';

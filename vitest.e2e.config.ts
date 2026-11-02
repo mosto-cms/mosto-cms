@@ -10,7 +10,9 @@ export default defineConfig({
   test: {
     include: ['examples/*/test/**/*.test.ts'],
     environment: 'node',
-    testTimeout: 30_000,
+    // The files share the starter's build: one next start at a time.
+    fileParallelism: false,
+    testTimeout: 60_000,
     hookTimeout: 120_000,
   },
 });

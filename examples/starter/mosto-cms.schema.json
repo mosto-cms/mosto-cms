@@ -1,20 +1,26 @@
 {
   "$schema": "../../packages/core/schema.json",
   "version": 1,
-  "site": { "name": "Mosto CMS starter" },
-  "locales": ["en"],
+  "site": { "name": "Trattoria Starter" },
+  "locales": ["en", "it"],
+  "defaultLocale": "en",
+  "media": { "dir": "public/uploads", "publicPath": "/media" },
   "collections": [
     {
       "key": "home",
       "file": "content/home.json",
       "idField": "id",
       "type": "single",
-      "label": "Home page",
+      "label": { "en": "Home page", "it": "Pagina iniziale" },
       "fields": [
-        { "path": "en.hero.title", "kind": "text", "label": "Headline", "required": true, "maxLength": 80 },
-        { "path": "en.hero.subtitle", "kind": "multiline", "label": "Subtitle", "maxLength": 240 },
-        { "path": "en.highlights", "kind": "list", "label": "Highlights", "maxItems": 6, "maxLength": 40 },
-        { "path": "hero.image", "kind": "image", "label": "Hero image" }
+        { "path": "en.hero.title", "kind": "text", "label": { "en": "Headline", "it": "Titolo" }, "required": true, "maxLength": 80 },
+        { "path": "it.hero.title", "kind": "text", "label": { "en": "Headline", "it": "Titolo" }, "required": true, "maxLength": 80 },
+        { "path": "en.hero.subtitle", "kind": "multiline", "label": { "en": "Subtitle", "it": "Sottotitolo" }, "maxLength": 240 },
+        { "path": "it.hero.subtitle", "kind": "multiline", "label": { "en": "Subtitle", "it": "Sottotitolo" }, "maxLength": 240 },
+        { "path": "en.highlights", "kind": "list", "label": { "en": "Highlights", "it": "In evidenza" }, "maxItems": 6, "maxLength": 40 },
+        { "path": "it.highlights", "kind": "list", "label": { "en": "Highlights", "it": "In evidenza" }, "maxItems": 6, "maxLength": 40 },
+        { "path": "hero.image", "kind": "image", "label": { "en": "Hero photo", "it": "Foto principale" } },
+        { "path": "gallery", "kind": "imageList", "label": { "en": "Gallery", "it": "Galleria" }, "maxItems": 8 }
       ]
     },
     {
@@ -23,11 +29,13 @@
       "idField": "slug",
       "type": "list",
       "titleField": "{locale}.name",
-      "label": "Menu",
+      "label": { "en": "Menu", "it": "Menu" },
       "fields": [
-        { "path": "en.name", "kind": "text", "label": "Name", "required": true, "maxLength": 60 },
-        { "path": "en.description", "kind": "text", "label": "Description", "maxLength": 140 },
-        { "path": "price", "kind": "text", "label": "Price", "ai": { "locked": true } }
+        { "path": "en.name", "kind": "text", "label": { "en": "Name", "it": "Nome" }, "required": true, "maxLength": 60 },
+        { "path": "it.name", "kind": "text", "label": { "en": "Name", "it": "Nome" }, "required": true, "maxLength": 60 },
+        { "path": "en.description", "kind": "text", "label": { "en": "Description", "it": "Descrizione" }, "maxLength": 140 },
+        { "path": "it.description", "kind": "text", "label": { "en": "Description", "it": "Descrizione" }, "maxLength": 140 },
+        { "path": "price", "kind": "text", "label": { "en": "Price", "it": "Prezzo" }, "ai": { "locked": true } }
       ]
     }
   ]

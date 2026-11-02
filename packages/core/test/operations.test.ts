@@ -12,6 +12,8 @@ describe('describe / list / get', () => {
     expect(d.collections.map((c) => c.key)).toEqual(['fleet']);
     expect(d.access).toEqual({ write: false, collections: ['fleet'], actor: 'human' });
     expect(d.capabilities).toEqual({ history: true, revert: true, uploadAsset: false });
+    expect(d.media).toMatchObject({ publicPath: '/uploads', maxBytes: 10 * 1024 * 1024 });
+    expect(d.media.accept).toContain('image/webp');
   });
 
   it('lists editable fields and entries', async () => {
@@ -276,6 +278,17 @@ describe('uploadAsset', () => {
     await expectCode(cms.uploadAsset({ filename: 'x.png', contentType: 'image/png', dataBase64: '###' }), 'bad_request');
     const ok = await cms.uploadAsset({ filename: 'x.png', contentType: 'image/png', dataBase64: 'AAAA' });
     expect(ok.path).toBe('/media/x-abcd1234.png');
+  });
+
+  it('refuses SVG unless the schema opts in (an SVG can carry script)', async () => {
+    const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>').toString('base64');
+    const { cms } = setup();
+    await expectCode(cms.uploadAsset({ filename: 'logo.svg', contentType: 'image/svg+xml', dataBase64: svg }), 'unsupported');
+    const optIn = siteSchema((s) => {
+      s.media = { dir: 'public/uploads', publicPath: '/uploads', accept: ['image/png', 'image/svg+xml'] };
+    });
+    const { cms: trusted } = setup({ schema: optIn });
+    expect((await trusted.uploadAsset({ filename: 'logo.svg', contentType: 'image/svg+xml', dataBase64: svg })).path).toMatch(/\.svg$/);
   });
 });
 

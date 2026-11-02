@@ -1,7 +1,7 @@
 {
   "name": "@mosto-cms/next",
   "version": "0.0.0",
-  "description": "Mosto CMS for Next.js (App Router): the /api/mosto-cms endpoint, a live content reader with on-demand revalidation, an optional media proxy and the /admin mount.",
+  "description": "Mosto CMS for Next.js (App Router): the /api/mosto-cms endpoint, a live content reader with on-demand revalidation, an optional media proxy, the /admin interface and the click-to-edit overlay.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
@@ -10,7 +10,12 @@
     "url": "git+https://github.com/mosto-cms/mosto-cms.git",
     "directory": "packages/next"
   },
-  "keywords": ["cms", "mosto-cms", "nextjs", "git-based-cms"],
+  "keywords": [
+    "cms",
+    "mosto-cms",
+    "nextjs",
+    "git-based-cms"
+  ],
   "exports": {
     ".": {
       "mosto-cms-source": "./src/index.ts",
@@ -21,9 +26,16 @@
       "mosto-cms-source": "./src/admin.tsx",
       "types": "./dist/admin.d.ts",
       "default": "./dist/admin.js"
+    },
+    "./overlay": {
+      "mosto-cms-source": "./src/overlay.tsx",
+      "types": "./dist/overlay.d.ts",
+      "default": "./dist/overlay.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "publishConfig": {
     "access": "public",
     "exports": {
@@ -34,6 +46,10 @@
       "./admin": {
         "types": "./dist/admin.d.ts",
         "default": "./dist/admin.js"
+      },
+      "./overlay": {
+        "types": "./dist/overlay.d.ts",
+        "default": "./dist/overlay.js"
       }
     }
   },
@@ -42,8 +58,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@mosto-cms/admin": "workspace:*",
     "@mosto-cms/auth": "workspace:*",
-    "@mosto-cms/core": "workspace:*"
+    "@mosto-cms/core": "workspace:*",
+    "@mosto-cms/overlay": "workspace:*"
   },
   "peerDependencies": {
     "next": ">=15.0.0",

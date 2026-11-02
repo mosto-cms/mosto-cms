@@ -17,6 +17,7 @@
     "@mosto-cms/auth": "workspace:*",
     "@mosto-cms/core": "workspace:*",
     "@mosto-cms/next": "workspace:*",
+    "@mosto-cms/overlay": "workspace:*",
     "next": "^16.4.4",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"

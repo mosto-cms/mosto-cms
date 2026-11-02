@@ -1,64 +1,27 @@
 /**
- * End to end on the built starter: a real `next start`, the file-system
- * adapter on a temporary copy of content/, and plain HTTP calls.
+ * End to end on the built starter over plain HTTP: a real `next start`, the
+ * file-system adapter (git mode) on a temporary copy of content/.
  *
  * Proves: sign-in → describe / listEditableFields → previewChange → publish
  * writes the JSON file → the page shows the new value after on-demand
- * revalidation, plus the fence, conflicts and connector key scopes.
+ * revalidation, plus the fence, conflicts, uploads through the media route,
+ * history and connector key scopes. The admin UI in a browser is covered by
+ * admin.e2e.test.ts.
  */
-import { spawn, type ChildProcess } from 'node:child_process';
-import { cp, mkdtemp, readFile, rm } from 'node:fs/promises';
-import { createRequire } from 'node:module';
-import { createServer } from 'node:net';
-import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { createConnectorKey, hashPassword } from '@mosto-cms/auth';
+import { createConnectorKey } from '@mosto-cms/auth';
 
-const starter = join(dirname(fileURLToPath(import.meta.url)), '..');
-const secret = `e2e-${crypto.randomUUID()}-${crypto.randomUUID()}`;
-const PASSWORD = 'correct horse battery';
+import { EDITOR, eventually, startStarter, type StarterServer } from './server';
 
-let server: ChildProcess;
+const PASSWORD = EDITOR.password;
+let srv: StarterServer;
 let base = '';
 let contentRoot = '';
-let log = '';
-
-const keys = {
-  write: createConnectorKey({ secret, write: true, label: 'Platform' }),
-  readOnly: createConnectorKey({ secret }),
-  ai: createConnectorKey({ secret, write: true, actor: 'ai' }),
-  revoked: createConnectorKey({ secret, write: true }),
-};
-
-function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const srv = createServer();
-    srv.once('error', reject);
-    srv.listen(0, '127.0.0.1', () => {
-      const { port } = srv.address() as { port: number };
-      srv.close(() => resolve(port));
-    });
-  });
-}
-
-async function waitForServer(url: string, timeoutMs = 60_000): Promise<void> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    try {
-      const res = await fetch(url);
-      if (res.ok) return;
-    } catch {
-      // not up yet
-    }
-    if (server.exitCode !== null) throw new Error(`next start exited:\n${log}`);
-    await new Promise((r) => setTimeout(r, 250));
-  }
-  throw new Error(`server did not start:\n${log}`);
-}
+let keys: Record<'write' | 'readOnly' | 'ai' | 'revoked', ReturnType<typeof createConnectorKey>>;
 
 async function api(body: unknown, headers: Record<string, string> = {}, path = '/api/mosto-cms') {
   const res = await fetch(`${base}${path}`, {
@@ -73,40 +36,23 @@ async function page(path = '/'): Promise<string> {
   return (await fetch(`${base}${path}`)).text();
 }
 
-async function eventually(check: () => Promise<boolean>, timeoutMs = 15_000): Promise<void> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    if (await check()) return;
-    await new Promise((r) => setTimeout(r, 300));
-  }
-  throw new Error('condition not met in time');
-}
-
 beforeAll(async () => {
-  contentRoot = await mkdtemp(join(tmpdir(), 'mosto-cms-starter-'));
-  await cp(join(starter, 'content'), join(contentRoot, 'content'), { recursive: true });
-  const passwordHash = await hashPassword(PASSWORD, { logN: 10 });
-  const port = await freePort();
-  base = `http://localhost:${port}`;
-  const env: Record<string, string> = {};
-  for (const [k, v] of Object.entries(process.env)) if (v !== undefined && !k.startsWith('MOSTO_CMS_')) env[k] = v;
-  Object.assign(env, {
-    NODE_ENV: 'production',
-    MOSTO_CMS_SECRET: secret,
-    MOSTO_CMS_EDITORS: JSON.stringify([{ email: 'anna@example.com', name: 'Anna', passwordHash }]),
-    MOSTO_CMS_REVOKED_KEYS: keys.revoked.kid,
-    MOSTO_CMS_CONTENT_ROOT: contentRoot,
-  });
-  const nextBin = createRequire(join(starter, 'package.json')).resolve('next/dist/bin/next');
-  server = spawn(process.execPath, [nextBin, 'start', '-p', String(port)], { cwd: starter, env, stdio: ['ignore', 'pipe', 'pipe'] });
-  server.stdout?.on('data', (d) => (log += d));
-  server.stderr?.on('data', (d) => (log += d));
-  await waitForServer(`${base}/api/mosto-cms`);
+  // Keys are signed with the site secret; the revoked one is listed in the env.
+  const secret = `e2e-keys-${crypto.randomUUID()}-${crypto.randomUUID()}`;
+  const revoked = createConnectorKey({ secret, write: true });
+  srv = await startStarter({ MOSTO_CMS_SECRET: secret, MOSTO_CMS_REVOKED_KEYS: revoked.kid });
+  base = srv.base;
+  contentRoot = srv.contentRoot;
+  keys = {
+    write: createConnectorKey({ secret, write: true, label: 'Platform' }),
+    readOnly: createConnectorKey({ secret }),
+    ai: createConnectorKey({ secret, write: true, actor: 'ai' }),
+    revoked,
+  };
 });
 
 afterAll(async () => {
-  server?.kill('SIGTERM');
-  if (contentRoot) await rm(contentRoot, { recursive: true, force: true });
+  await srv?.stop();
 });
 
 describe('starter, end to end', () => {
@@ -128,13 +74,14 @@ describe('starter, end to end', () => {
     expect(setCookie).toContain('HttpOnly');
     cookie = setCookie.split(';')[0] as string;
     const admin = await (await fetch(`${base}/admin`, { headers: { cookie } })).text();
-    expect(admin).toContain('Signed in as');
-    expect(admin).toContain('Anna');
+    // The admin is a client app: the server hands it the signed-in editor only.
+    expect(admin).toContain('Anna Rossi');
+    expect(admin).toContain('noindex');
   });
 
   it('describes the site and lists the editable fields', async () => {
     const d = await api({ op: 'describe' }, { cookie });
-    expect(d.body.result).toMatchObject({ protocol: 'mosto-cms/1', locales: ['en'], access: { write: true, actor: 'human' } });
+    expect(d.body.result).toMatchObject({ protocol: 'mosto-cms/1', locales: ['en', 'it'], access: { write: true, actor: 'human' }, capabilities: { history: true, revert: true } });
     const f = await api({ op: 'listEditableFields' }, { cookie });
     expect(f.body.result.map((c: { key: string }) => c.key)).toEqual(['home', 'products']);
   });
@@ -167,12 +114,25 @@ describe('starter, end to end', () => {
     });
   });
 
-  it('uploads an image into the media directory', async () => {
+  it('uploads an image, served right away by the media route; SVG is refused', async () => {
     const png = Buffer.from('89504e470d0a1a0a', 'hex').toString('base64');
     const up = await api({ op: 'uploadAsset', input: { filename: 'Pasta Shot.png', contentType: 'image/png', dataBase64: png } }, { cookie });
     expect(up.status).toBe(200);
-    expect(up.body.result.path).toMatch(/^\/uploads\/pasta-shot-[a-z0-9]+\.png$/);
+    expect(up.body.result.path).toMatch(/^\/media\/pasta-shot-[a-z0-9]+\.png$/);
     expect((await readFile(join(contentRoot, up.body.result.file))).length).toBe(8);
+    const served = await fetch(`${base}${up.body.result.path}`);
+    expect(served.status).toBe(200);
+    expect(served.headers.get('content-type')).toBe('image/png');
+
+    const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"/>').toString('base64');
+    const refused = await api({ op: 'uploadAsset', input: { filename: 'x.svg', contentType: 'image/svg+xml', dataBase64: svg } }, { cookie });
+    expect(refused.body.error.code).toBe('unsupported');
+  });
+
+  it('lists the history of publishes', async () => {
+    const h = await api({ op: 'history', input: { limit: 5 } }, { cookie });
+    expect(h.body.result.entries[0]).toMatchObject({ message: 'New headline and price', author: { name: 'Anna Rossi' } });
+    expect(h.body.result.entries.at(-1).message).toBe('Initial content');
   });
 
   it('enforces connector key scopes and revocation', async () => {

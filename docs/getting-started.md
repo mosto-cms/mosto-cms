@@ -1,16 +1,15 @@
 # Getting started (draft)
 
 **Status:** draft. The packages are not on npm yet; until then, try the
-[`examples/starter`](../examples/starter) app inside this repository. The `/admin` editing
-interface and the `npx mosto-cms init` command come in later releases: today `/admin` is the
-sign-in page and the content endpoint is complete.
+[`examples/starter`](../examples/starter) app inside this repository. The `npx mosto-cms init`
+command comes in a later release.
 
 This guide makes an existing Next.js (App Router) site editable. You need Node.js 22.
 
 ## 1. Install
 
 ```sh
-npm install @mosto-cms/core @mosto-cms/auth @mosto-cms/next @mosto-cms/adapter-fs @mosto-cms/adapter-github
+npm install @mosto-cms/core @mosto-cms/auth @mosto-cms/next @mosto-cms/admin @mosto-cms/overlay @mosto-cms/adapter-fs @mosto-cms/adapter-github
 ```
 
 ## 2. Put the content in JSON files
@@ -72,6 +71,8 @@ import schema from './mosto-cms.schema.json';
 export const cms = defineMostoCms({
   schema,
   adapter: (env) => githubAdapterFromEnv(env) ?? createFsAdapter({ root: process.cwd() }),
+  // Optional: the pages offered in the visual editor (default: the home page).
+  admin: { pages: [{ path: '/', label: 'Home' }, { path: '/menu', label: 'Menu' }] },
 });
 
 export const content = createContentReader({
@@ -109,19 +110,47 @@ export default createAdminPage(cms);
 
 ```tsx
 import { content } from '@/mosto-cms.config';
+import { mostoField } from '@mosto-cms/next';
 
 export const revalidate = 3600; // a publish refreshes the page immediately anyway
 
 export default async function Home() {
-  const home = await content.entry<{ en: { hero: { title: string } } }>('home');
-  return <h1 data-mosto-field="home:home:en.hero.title">{home?.en.hero.title}</h1>;
+  const home = await content.entry<{ en: { hero: { title: string } }; hero: { image: string } }>('home');
+  return (
+    <>
+      <h1 {...mostoField('home:home', 'en.hero.title')}>{home?.en.hero.title}</h1>
+      <img {...mostoField('home:home', 'hero.image')} src={home?.hero.image} alt="" />
+    </>
+  );
 }
 ```
 
 The reader returns the latest published content (GitHub through the Next.js cache, or the
 disk) and falls back to the JSON bundled at build time if the live read fails: the CMS never
-breaks the site. `data-mosto-field="<collection>:<id>:<path>"` is what the visual editor will
-use to make the element clickable.
+breaks the site. `mostoField(entry, path, index?)` returns the `data-mosto-field` attribute
+(`<collection>:<id>:<path>`) the visual editor uses; pass an index for one item of a list
+(`mostoField('fleet:libeccio', 'gallery', 2)` → `fleet:libeccio:gallery.2`) and
+`{ kind: 'image' }` when it cannot be inferred from the tag. In client components import it
+from `@mosto-cms/overlay`.
+
+Then add the overlay once, in the root layout. It renders nothing and does nothing for
+visitors; it only wakes up inside `/admin`:
+
+```tsx
+// app/layout.tsx
+import { MostoOverlay } from '@mosto-cms/next/overlay';
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <body>
+        {children}
+        <MostoOverlay />
+      </body>
+    </html>
+  );
+}
+```
 
 ## 6. Editors and secrets
 
@@ -137,7 +166,19 @@ MOSTO_CMS_SECRET=...
 MOSTO_CMS_EDITORS='[{"email":"anna@example.com","name":"Anna","passwordHash":"scrypt.15.8.1...."}]'
 ```
 
-Open `/admin` and sign in. Editors need no GitHub account.
+Open `/admin` and sign in. Editors need no GitHub account. They get three modes:
+
+- **On the page**: the site in a frame; click a text or a photo, change it in the side panel
+  (a bottom sheet on phones), see it change on the page as they type, then **Publish**.
+- **All content**: every editable field as a form, grouped by page or list, with the site's
+  languages side by side.
+- **History**: the recent publishes, each with **Undo** (needs GitHub, or `git: true` on the
+  fs adapter locally).
+
+Photos are compressed in the browser before upload (longest side 2400 px, WebP when the site
+accepts it); every file must stay under `media.maxBytes` (10 MB by default). The interface is
+in English and Italian, following the browser, and can be switched from the account menu.
+`defineMostoCms({ admin: { poweredBy: false } })` hides the "Powered by Mosto CMS" link.
 
 ## 7. Production on GitHub
 
@@ -165,7 +206,38 @@ import schema from '@/mosto-cms.schema.json';
 export const GET = createMediaHandler({ schema, source: () => githubSourceFromEnv(process.env) });
 ```
 
-## 8. Connect a platform or a script
+## 8. Before going live
+
+- **SVG uploads are off by default.** An SVG can contain script and uploads are served from
+  your own domain. To allow them, list `"image/svg+xml"` in `media.accept`, only for editors
+  you trust. The media route serves SVGs with a sandboxing Content-Security-Policy; files
+  served straight from `public/` get no such protection.
+- **Sign-in attempt limits on serverless.** The default limiter counts in memory, so on
+  Vercel or Netlify each function instance counts on its own: a brake, not a global cap. For
+  a global limit pass a shared store (Redis, Vercel KV, Upstash…) implementing
+  `RateLimitStore` from `@mosto-cms/auth`:
+
+  ```ts
+  defineMostoCms({
+    schema,
+    adapter,
+    rateLimit: {
+      store: {
+        async get(key) { return (await kv.get(`mosto:${key}`)) ?? null; },
+        async increment(key, windowMs) { /* add one, start a window of windowMs if none */ },
+        async reset(key) { await kv.del(`mosto:${key}`); },
+      },
+    },
+  });
+  ```
+- **Upload size on Vercel.** Functions accept request bodies up to about 4.5 MB, so larger
+  videos cannot be uploaded through `/api/mosto-cms` there; compress them first or host them
+  elsewhere and paste the address.
+- **Framing.** `/admin` shows your pages in an `<iframe>` from the same origin. If your site
+  sends `X-Frame-Options: DENY` or `Content-Security-Policy: frame-ancestors 'none'`, allow
+  `'self'` for the visual editor to work.
+
+## 9. Connect a platform or a script
 
 Create a scoped key and give it to the tool that needs it:
 

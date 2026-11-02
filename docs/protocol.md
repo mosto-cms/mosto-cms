@@ -168,8 +168,8 @@ nothing is kept between calls, so they run as serverless functions.
 
 | Operation | Input | Result | Writes |
 |---|---|---|---|
-| `describe` | `{}` | protocol, schema version, site, locales, default locale, collections (key, type, label, number of fields), capabilities, the caller's access, operation names | no |
-| `listEditableFields` | `{ collection? }` | `[{ key, type, label, idField, fields }]` with full field definitions | no |
+| `describe` | `{}` | protocol, schema version, site, locales, default locale, collections (key, type, label, number of fields), capabilities, upload limits (`media`: public path, max bytes, accepted types), the caller's access, operation names | no |
+| `listEditableFields` | `{ collection? }` | `[{ key, type, label, idField, file, fields }]` with full field definitions | no |
 | `listEntries` | `{ collection, locale? }` | `[{ id, title }]` | no |
 | `getField` | `{ collection, id, path? }` | with `path`: `{ collection, id, path, kind, value, revision }`; without: `{ collection, id, revision, fields: { <path>: value } }` (declared fields only) | no |
 | `previewChange` | `{ changes: Change[] }` | `{ changes: ChangeResult[], revisions: { <file>: <revision> } }` | no |
@@ -313,8 +313,8 @@ They use the same envelope; a locked sign-in answers `429` with code `unauthoriz
 ## 5. Visual editor messages
 
 The admin shows the site in an `<iframe>` with `?mostoEdit=1`. A small overlay script on the
-site highlights annotated elements and talks to the admin with `window.postMessage`. Annotate
-elements like this:
+site (`@mosto-cms/overlay`) highlights annotated elements and talks to the admin with
+`window.postMessage`. Annotate elements like this (or with `mostoField()`):
 
 ```html
 <h1 data-mosto-field="content:home:it.hero.title">Benvenuti</h1>
@@ -323,6 +323,9 @@ elements like this:
 ```
 
 `data-mosto-kind` is optional for `<img>` and `<video>` (inferred) and defaults to `text`.
+One item of a list field is addressed by its index (`gallery.2`). When several annotated
+elements are stacked at the clicked point (the frames of a carousel), the overlay selects the
+most visible one; a non-annotated element on top (a carousel arrow) keeps the click.
 
 ### 5.1 Messages
 
@@ -330,17 +333,18 @@ Every message is an object with `type` and `v` (protocol message version, `1`).
 
 | Direction | `type` | Payload |
 |---|---|---|
-| site → admin | `mosto:overlay-loaded` | none. Sent once when the overlay starts, to `window.parent`. The only message sent before the handshake. |
+| site → admin | `mosto:overlay-loaded` | none. Sent once when the overlay starts, to `window.parent`, addressed to each allowed admin origin (the browser delivers it only if the parent has one of them). The only message sent before the handshake. |
 | admin → site | `mosto:init` | `{ locale? }` |
-| site → admin | `mosto:ready` | `{ fields: number }` (annotated elements found) |
+| site → admin | `mosto:ready` | `{ fields: number, url?: string }` (annotated elements found; the page path without `mostoEdit`) |
 | site → admin | `mosto:select` | `{ field: { collection, id, path, kind }, value, rect: { top, left, width, height } }` |
-| admin → site | `mosto:set` | `{ field: { collection, id, path, kind }, value }`: optimistic, in-place update of the page |
-| admin → site | `mosto:highlight` | `{ field }`, optional |
+| admin → site | `mosto:set` | `{ field: { collection, id, path, kind }, value }`: optimistic, in-place update of the page. A list value also updates the elements annotated per item (`<path>.<i>`). |
+| admin → site | `mosto:highlight` | `{ field \| null }`: scroll to and outline a field, or clear the outline |
 
 ### 5.2 Origin checks
 
-- The overlay activates only when `?mostoEdit=1` is present AND the page is inside a frame.
-- The site MUST only accept `mosto:init` from an allowed admin origin: by default the site's own
+- The overlay activates only when `?mostoEdit=1` is present AND the page is inside a frame,
+  and stays passive (no highlight, no click capture) until a valid `mosto:init` arrives.
+- The site MUST only accept `mosto:init` from `window.parent` and from an allowed admin origin: by default the site's own
   origin (the `/admin` page); additional origins (for example a connected platform) are listed
   explicitly in the site configuration. Messages from any other origin are ignored.
 - After the handshake the site sends every message to that exact origin, never `*`, and ignores

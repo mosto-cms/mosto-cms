@@ -32,9 +32,9 @@ from the page. Visual-editing CMSs are usually hosted services. Mosto CMS aims a
 | [`@mosto-cms/core`](packages/core) | Schema format and validation, field addressing, the fence, the protocol operations, standard errors. No dependencies. | in progress |
 | [`@mosto-cms/adapter-github`](packages/adapter-github) | Reads and writes content through the GitHub API: atomic multi-file commits, conflict detection, token or GitHub App auth. | in progress |
 | [`@mosto-cms/adapter-fs`](packages/adapter-fs) | Local files, for development. | in progress |
-| [`@mosto-cms/next`](packages/next) | Next.js: `/api/mosto-cms` endpoint, live content reader with on-demand revalidation, media proxy, `/admin` mount. | in progress |
-| `@mosto-cms/overlay` | Click-to-edit overlay and the versioned editor `postMessage` protocol. | planned |
-| `@mosto-cms/admin` | The `/admin` UI: visual mode, forms, history and undo, uploads, side-by-side locales. | planned |
+| [`@mosto-cms/next`](packages/next) | Next.js: `/api/mosto-cms` endpoint, live content reader with on-demand revalidation, media proxy, the `/admin` page and the overlay component. | in progress |
+| [`@mosto-cms/overlay`](packages/overlay) | Click-to-edit overlay on the live site, the versioned, origin-checked editor `postMessage` protocol, and `mostoField()` for annotations. No dependencies. | in progress |
+| [`@mosto-cms/admin`](packages/admin) | The `/admin` UI: visual mode, forms, history and undo, uploads with in-browser compression, languages side by side; English and Italian; works on phones. | in progress |
 | [`@mosto-cms/auth`](packages/auth) | Editor sign-in with email and password (no GitHub account), scoped and revocable connector keys. No database. | in progress |
 | `mosto-cms` (CLI) | `npx mosto-cms init` for an existing site. | planned |
 
@@ -56,12 +56,16 @@ pnpm typecheck
 pnpm lint
 pnpm guard       # repository hygiene: no secrets, no AI/agent code
 pnpm build       # build the packages (the example apps import the built files)
-pnpm test:e2e    # build examples/starter and run its end-to-end test
+pnpm test:e2e    # build examples/starter, run its end-to-end tests (HTTP and a headless browser)
 ```
 
 Inside the repository, tests and type checks read the packages' TypeScript sources through the
 `mosto-cms-source` export condition; apps (the starter, or a site using the published
 packages) read the built `dist` files.
+
+The browser end-to-end test drives `/admin` with headless Chromium through `playwright-core`.
+Install the browser once with `pnpm exec playwright-core install chromium` (CI does it with
+`--with-deps`); set `MOSTO_CMS_SCREENSHOTS=<dir>` to save a screenshot of every screen.
 
 Versioning uses [changesets](https://github.com/changesets/changesets): add one with
 `pnpm changeset` in any PR that changes a published package.

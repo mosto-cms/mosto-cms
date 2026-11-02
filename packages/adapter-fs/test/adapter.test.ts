@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -98,5 +99,42 @@ describe('fs adapter', () => {
     await cms.publish({ changes: [{ collection: 'tours', id: 'giro', path: 'price', value: '€ 140' }] });
     expect(readFileSync(join(root, 'data/tours.json'), 'utf8')).toBe(TOURS.replace('€ 120', '€ 140'));
     expect(await code(cms.publish({ changes: [{ collection: 'tours', id: 'giro', path: 'internal', value: '2' }] }))).toBe('field_not_editable');
+  });
+
+  it('with git: true, commits each write and offers history and revert', async () => {
+    const { root } = site();
+    // The site lives in a sub-directory of the repository, like examples/starter.
+    const repo = mkdtempSync(join(tmpdir(), 'mosto-cms-fs-git-'));
+    const siteDir = join(repo, 'site');
+    mkdirSync(join(siteDir, 'data'), { recursive: true });
+    writeFileSync(join(siteDir, 'data/tours.json'), readFileSync(join(root, 'data/tours.json')));
+    writeFileSync(join(repo, 'unrelated.txt'), 'draft');
+    const g = (...args: string[]) => execFileSync('git', ['-c', 'user.name=T', '-c', 'user.email=t@example.com', '-C', repo, ...args], { encoding: 'utf8' });
+    g('init', '-q');
+    g('add', 'site');
+    g('commit', '-q', '-m', 'initial');
+
+    const adapter = createFsAdapter({ root: siteDir, git: true });
+    const cms = createCms({ schema, adapter, author: { name: 'Anna', email: 'anna@example.com' } });
+    expect(cms.describe().capabilities).toMatchObject({ history: true, revert: true });
+
+    const pub = await cms.publish({ message: 'Summer price', changes: [{ collection: 'tours', id: 'giro', path: 'price', value: '€ 150' }] });
+    expect(pub.revision).toMatch(/^[0-9a-f]{40}$/);
+    expect(g('log', '-1', '--format=%an <%ae> %s').trim()).toBe('Anna <anna@example.com> Summer price');
+    // Only the content file is committed, never the rest of the working copy.
+    expect(g('status', '--porcelain')).toContain('unrelated.txt');
+
+    const { entries } = await cms.history({});
+    expect(entries.map((e) => e.message)).toEqual(['Summer price', 'initial']);
+    expect(entries[0]).toMatchObject({ files: ['data/tours.json'], author: { name: 'Anna' } });
+
+    const old = await adapter.readFile('data/tours.json', { at: entries[1]!.revision });
+    expect(JSON.parse(old!.text)[0].price).toBe('€ 120');
+
+    const undo = await cms.revert({ revision: pub.revision! });
+    expect(undo.published).toBe(true);
+    expect(JSON.parse(readFileSync(join(siteDir, 'data/tours.json'), 'utf8'))[0].price).toBe('€ 120');
+    expect((await cms.history({})).entries[0]!.message).toBe('Revert "Summer price"');
+    expect(await code(adapter.readFile('data/tours.json', { at: 'not a sha' }))).toBe('not_found');
   });
 });

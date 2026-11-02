@@ -9,8 +9,10 @@
 - `createContentReader()`: live content (GitHub through the Next.js data cache, or the disk)
   with a silent fallback to the JSON bundled at build time.
 - `createMediaHandler()`: optional proxy that serves uploads from a private repository.
-- `@mosto-cms/next/admin`: the `/admin` mount (sign-in and status today, the editor UI in a
-  later release).
+- `@mosto-cms/next/admin`: the `/admin` page, the editing interface of `@mosto-cms/admin`.
+- `@mosto-cms/next/overlay`: `<MostoOverlay />` for the root layout, the click-to-edit layer
+  that wakes up only inside `/admin`.
+- `mostoField()`: the annotation helper (`<h1 {...mostoField('home:home', 'en.title')}>`).
 
 ```ts
 // mosto-cms.config.ts
@@ -28,6 +30,9 @@ export const dynamic = 'force-dynamic';
 
 // app/admin/[[...admin]]/page.tsx
 export default createAdminPage(cms);
+
+// app/layout.tsx
+<body>{children}<MostoOverlay /></body>
 ```
 
 Guide: [`docs/getting-started.md`](../../docs/getting-started.md). Working example:

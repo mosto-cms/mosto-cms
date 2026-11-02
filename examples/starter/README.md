@@ -1,9 +1,10 @@
 # Mosto CMS starter
 
-A minimal Next.js App Router site whose home page and menu are editable with Mosto CMS:
-`content/*.json` holds the content, `mosto-cms.schema.json` declares the editable fields,
-`mosto-cms.config.ts` wires the packages, and the page annotates each editable element with
-`data-mosto-field`.
+A small Next.js App Router site in English and Italian whose home page, gallery and menu are
+editable with Mosto CMS: `content/*.json` holds the content, `mosto-cms.schema.json` declares
+the editable fields, `mosto-cms.config.ts` wires the packages, `app/components/home.tsx`
+annotates each editable element with `mostoField()`, `app/layout.tsx` mounts the overlay and
+`app/media` serves uploads right away.
 
 Inside this repository:
 
@@ -18,16 +19,9 @@ pnpm dev
 ```
 
 Sign in at http://localhost:3000/admin. Without `MOSTO_CMS_GITHUB_REPO`, publishing edits the
-files in `content/` directly. Until the admin UI ships, publish through the endpoint, for
-example from the browser console on `/admin`:
+files in `content/` directly; add `MOSTO_CMS_FS_GIT=1` to also commit each publish, which turns
+on History and Undo.
 
-```js
-await fetch('/api/mosto-cms', {
-  method: 'POST',
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify({ op: 'publish', input: { changes: [{ collection: 'home', id: 'home', path: 'en.hero.title', value: 'Hello' }] } }),
-}).then((r) => r.json());
-```
-
-`pnpm test:e2e` at the repository root builds this app and runs the end-to-end test in
-`test/e2e.test.ts`.
+`pnpm test:e2e` at the repository root builds this app and runs the end-to-end tests in `test/`:
+the protocol over HTTP (`e2e.test.ts`) and `/admin` in headless Chromium on desktop and on a
+phone (`admin.test.ts`).
