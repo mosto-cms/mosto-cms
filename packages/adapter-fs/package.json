@@ -13,8 +13,9 @@
   "keywords": ["cms", "mosto-cms"],
   "exports": {
     ".": {
-      "types": "./src/index.ts",
-      "default": "./src/index.ts"
+      "mosto-cms-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
     }
   },
   "files": ["dist"],

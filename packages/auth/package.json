@@ -1,0 +1,44 @@
+{
+  "name": "@mosto-cms/auth",
+  "version": "0.0.0",
+  "description": "Mosto CMS credentials without a database: editor login (email + password, signed HttpOnly session cookie, rate limiting) and scoped, revocable connector keys signed with the site secret.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mosto-cms/mosto-cms.git",
+    "directory": "packages/auth"
+  },
+  "keywords": ["cms", "mosto-cms", "auth"],
+  "exports": {
+    ".": {
+      "mosto-cms-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "mosto-cms-auth": "./bin/mosto-cms-auth.mjs"
+  },
+  "files": ["dist", "bin"],
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@mosto-cms/core": "workspace:*"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -18,6 +18,7 @@ nvm use            # Node.js 22, pinned in .nvmrc
 corepack enable    # pnpm version pinned in package.json
 pnpm install
 pnpm test && pnpm typecheck && pnpm lint && pnpm guard
+pnpm build && pnpm test:e2e   # when you touch @mosto-cms/next, @mosto-cms/auth or the starter
 ```
 
 ## Pull requests
