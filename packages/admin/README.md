@@ -3,9 +3,11 @@
 The `/admin` interface of [Mosto CMS](https://github.com/mosto-cms/mosto-cms), made for people
 who run a small business, not for developers:
 
-- **On the page**: the site in a frame; click a text, a photo, a video or one photo of a
-  gallery, edit it in a side panel (a bottom sheet on phones), watch the page change while
-  typing, then Publish. All edits go out together as one commit.
+- **On the page**: the site in a frame, in two modes. **Edit** (default): hover shows what can
+  be changed, a click selects a text, a photo, a video or one photo of a gallery; texts are
+  edited right on the page (Enter applies, Esc cancels) or in a side panel (a bottom sheet on
+  phones), photos are replaced from the panel. **Browse**: the site works as usual, links
+  included. E switches mode. Then Publish: all edits go out together as one commit.
 - **All content**: every editable field as a form, grouped by page or list, with the site's
   languages side by side.
 - **History**: recent publishes with Undo (`revert`), asking again if something changed since.

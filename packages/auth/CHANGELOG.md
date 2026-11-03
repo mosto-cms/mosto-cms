@@ -1,5 +1,11 @@
 # @mosto-cms/auth
 
+## 0.1.0-alpha.1
+
+### Patch Changes
+
+- Version aligned with the other `@mosto-cms` packages (no changes).
+
 ## 0.1.0-alpha.0
 
 ### Minor Changes

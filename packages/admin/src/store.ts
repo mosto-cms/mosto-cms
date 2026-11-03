@@ -124,8 +124,8 @@ export function useWorkspaceStore(opts: {
     [drafts, entries],
   );
 
-  const edit = useCallback((ref: FieldRef, def: ResolvedField, value: FieldValue) => {
-    const before = storedValue(entriesRef.current[entryKey(ref.collection, ref.id)], ref.path);
+  const edit = useCallback((ref: FieldRef, def: ResolvedField, value: FieldValue, stored?: EntryData | null) => {
+    const before = storedValue(stored ?? entriesRef.current[entryKey(ref.collection, ref.id)], ref.path);
     setDrafts((d) => withDraft(d, { ...ref, kind: def.kind, value, before }));
     previewSink.current?.(ref, def.kind, value);
   }, []);

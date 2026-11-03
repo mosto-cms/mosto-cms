@@ -69,6 +69,12 @@ export const ADMIN_CSS = `
 .mc-panel-empty h2{font-family:var(--serif);font-size:24px;line-height:1.25;font-weight:500}
 .mc-sheet-handle{display:none}
 .mc-hint{display:none}
+.mc-modes{display:flex;border:1px solid var(--line-2);border-radius:999px;padding:2px;background:var(--white);gap:2px}
+.mc-modes button{border:0;background:transparent;border-radius:999px;padding:6px 14px;cursor:pointer;font:inherit;font-size:14px;color:var(--ink);display:inline-flex;align-items:center;gap:6px}
+.mc-modes button[aria-pressed="true"]{background:var(--ink);color:var(--cream)}
+.mc-modes button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.mc-kbd{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 4px;border:1px solid var(--line-2);border-radius:4px;font-size:11px;line-height:1;color:var(--muted);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.mc-tip{margin-top:12px;font-size:13px}
 
 /* fields */
 .mc-eyebrow{font-size:12px;color:var(--muted);letter-spacing:.05em;text-transform:uppercase}

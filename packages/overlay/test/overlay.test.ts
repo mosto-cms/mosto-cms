@@ -201,3 +201,138 @@ describe('cleanMediaSrc', () => {
     expect(cleanMediaSrc(null)).toBe('');
   });
 });
+
+describe('modes: Edit and Browse', () => {
+  const click = (el: Element, init: MouseEventInit = {}) => {
+    const e = new MouseEvent('click', { bubbles: true, cancelable: true, ...init });
+    el.dispatchEvent(e);
+    return e;
+  };
+
+  it('starts in Edit: links do not navigate, the page is marked for editing', () => {
+    const f = framed('<a id="l" href="/it/tours">Tours</a><h1 data-mosto-field="home:home:it.title">Ciao</h1>');
+    send(f, { type: 'mosto:init', v: 1 });
+    expect(document.documentElement.classList.contains('mosto-cms-edit')).toBe(true);
+    const assign = vi.spyOn(window.location, 'assign').mockImplementation(() => undefined);
+    expect(click(document.getElementById('l')!).defaultPrevented).toBe(true);
+    expect(assign).not.toHaveBeenCalled();
+    assign.mockRestore();
+  });
+
+  it('Browse leaves the page alone and keeps the editor on the next page', () => {
+    const f = framed('<a id="l" href="/it/tours">Tours</a><h1 data-mosto-field="home:home:it.title">Ciao</h1>');
+    send(f, { type: 'mosto:init', v: 1, mode: 'browse' });
+    expect(document.documentElement.classList.contains('mosto-cms-edit')).toBe(false);
+    expect(document.querySelector('h1')!.hasAttribute('tabindex')).toBe(false);
+    const before = sent(f).length;
+    expect(click(document.querySelector('h1')!).defaultPrevented).toBe(false);
+    expect(sent(f)).toHaveLength(before);
+    const assign = vi.spyOn(window.location, 'assign').mockImplementation(() => undefined);
+    click(document.getElementById('l')!);
+    expect(assign).toHaveBeenCalledWith(`${SITE}/it/tours?mostoEdit=1`);
+    assign.mockRestore();
+  });
+
+  it('switches when the admin says so; E on the page asks the admin', () => {
+    const f = framed('<h1 data-mosto-field="home:home:it.title">Ciao</h1>');
+    send(f, { type: 'mosto:init', v: 1 });
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'e', bubbles: true, cancelable: true }));
+    expect(sent(f).at(-1)).toMatchObject({ type: 'mosto:mode', mode: 'browse' });
+    expect(document.documentElement.classList.contains('mosto-cms-edit')).toBe(true); // the admin decides
+    send(f, { type: 'mosto:mode', v: 1, mode: 'browse' });
+    expect(document.documentElement.classList.contains('mosto-cms-edit')).toBe(false);
+    send(f, { type: 'mosto:mode', v: 1, mode: 'edit' });
+    expect(document.documentElement.classList.contains('mosto-cms-edit')).toBe(true);
+    send(f, { type: 'mosto:mode', v: 1, mode: 'fly' });
+    expect(document.documentElement.classList.contains('mosto-cms-edit')).toBe(true);
+  });
+
+  it('hover shows the field name, or "Not editable" on content that is not a field', () => {
+    const f = framed('<h2 id="t">Le Esperienze <span data-mosto-field="content:home:it.tours.titleAccent">in mare</span></h2><p id="p">Fixed text</p>');
+    send(f, { type: 'mosto:init', v: 1, locale: 'it', labels: { 'content:it.tours.titleAccent': 'IT · tours › titleAccent' } });
+    const chip = document.getElementById('mosto-cms-chip')!;
+    document.querySelector('span')!.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
+    expect(chip.style.display).toBe('block');
+    expect(chip.textContent).toBe('IT · tours › titleAccent');
+    expect(document.querySelector('span')!.classList.contains('mosto-cms-hover')).toBe(true);
+    document.getElementById('p')!.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
+    expect(chip.textContent).toBe('Non modificabile');
+    expect(document.getElementById('p')!.classList.contains('mosto-cms-locked')).toBe(true);
+    expect(document.querySelector('span')!.classList.contains('mosto-cms-hover')).toBe(false);
+  });
+
+  it('edits a text in place: Enter applies (one mosto:edit), Esc cancels', () => {
+    const f = framed('<h2><span id="s" data-mosto-field="content:home:it.tours.title">Le Esperienze</span></h2>');
+    send(f, { type: 'mosto:init', v: 1 });
+    const s = document.getElementById('s')!;
+    click(s);
+    expect(sent(f).at(-1)).toMatchObject({ type: 'mosto:select', inline: true, value: 'Le Esperienze' });
+    expect(s.getAttribute('contenteditable')).toMatch(/plaintext-only|true/);
+    expect(s.classList.contains('mosto-cms-editing')).toBe(true);
+    s.textContent = 'Le Esperienze uniche\n';
+    s.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    expect(s.hasAttribute('contenteditable')).toBe(false);
+    expect(s.textContent).toBe('Le Esperienze uniche');
+    expect(sent(f).at(-1)).toEqual({
+      type: 'mosto:edit',
+      v: 1,
+      field: { collection: 'content', id: 'home', path: 'it.tours.title', kind: 'text' },
+      value: 'Le Esperienze uniche',
+      to: SITE,
+    });
+
+    const before = sent(f).length;
+    click(s);
+    s.textContent = 'Oops';
+    s.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    expect(s.textContent).toBe('Le Esperienze uniche');
+    expect(s.hasAttribute('contenteditable')).toBe(false);
+    expect(sent(f).filter((m) => m.type === 'mosto:edit')).toHaveLength(1);
+    expect(sent(f).length).toBeGreaterThanOrEqual(before);
+  });
+
+  it('blur applies too; an unchanged text sends nothing', () => {
+    const f = framed('<p id="p" data-mosto-field="content:home:it.tours.desc" data-mosto-kind="multiline">Uno</p>');
+    send(f, { type: 'mosto:init', v: 1 });
+    const p = document.getElementById('p')!;
+    click(p);
+    p.dispatchEvent(new FocusEvent('blur'));
+    expect(sent(f).filter((m) => m.type === 'mosto:edit')).toHaveLength(0);
+    click(p);
+    p.textContent = 'Uno\nDue';
+    p.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, bubbles: true, cancelable: true }));
+    expect(p.getAttribute('contenteditable')).not.toBeNull(); // Shift+Enter is a new line in a multiline field
+    p.dispatchEvent(new FocusEvent('blur'));
+    expect(sent(f).at(-1)).toMatchObject({ type: 'mosto:edit', value: 'Uno\nDue', field: { kind: 'multiline' } });
+  });
+
+  it('elements holding markup are edited in the panel, not in place', () => {
+    const f = framed('<h2 id="h" data-mosto-field="content:home:it.manifesto.titleLine2">La giornata è <span>tua.</span></h2>');
+    send(f, { type: 'mosto:init', v: 1 });
+    const h = document.getElementById('h')!;
+    click(h);
+    expect(sent(f).at(-1)).toMatchObject({ type: 'mosto:select', inline: false });
+    expect(h.hasAttribute('contenteditable')).toBe(false);
+  });
+
+  it('Esc clears the selection and tells the admin', () => {
+    const f = framed('<img id="i" data-mosto-field="tours:capri:image" src="/a.jpg">');
+    send(f, { type: 'mosto:init', v: 1 });
+    click(document.getElementById('i')!);
+    expect(document.getElementById('i')!.classList.contains('mosto-cms-active')).toBe(true);
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    expect(document.getElementById('i')!.classList.contains('mosto-cms-active')).toBe(false);
+    expect(sent(f).at(-1)).toMatchObject({ type: 'mosto:deselect' });
+  });
+});
+
+describe('fieldLabel', () => {
+  it('uses the schema label, the list label for an item, else a readable path', async () => {
+    const { fieldLabel } = await import('../src/index.js');
+    const labels = { 'fleet:gallery': 'Photos', 'content:it.hero.title': 'Hero title' };
+    expect(fieldLabel({ collection: 'content', id: 'home', path: 'it.hero.title' }, labels)).toBe('Hero title');
+    expect(fieldLabel({ collection: 'fleet', id: 'x', path: 'gallery.2' }, labels)).toBe('Photos · 3');
+    expect(fieldLabel({ collection: 'content', id: 'home', path: 'it.tours.titleAccent' })).toBe('tours › title accent');
+    expect(fieldLabel({ collection: 'content', id: 'home', path: 'en.tours.list.0.title' })).toBe('list › title');
+  });
+});

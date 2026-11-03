@@ -18,7 +18,8 @@ export type Store = {
   loadEntryList(collection: string, force?: boolean): Promise<Array<{ id: string; title: string }>>;
   valueOf(ref: FieldRef): FieldValue | null;
   draftOf(ref: FieldRef): Draft | undefined;
-  edit(ref: FieldRef, def: ResolvedField, value: FieldValue): void;
+  /** `stored`: the entry as just read, when the cache may not have it yet. */
+  edit(ref: FieldRef, def: ResolvedField, value: FieldValue, stored?: EntryData | null): void;
   revertDraft(ref: FieldRef): void;
   discard(): void;
   publish(): Promise<void>;

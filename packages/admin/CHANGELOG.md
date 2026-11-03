@@ -1,5 +1,16 @@
 # @mosto-cms/admin
 
+## 0.1.0-alpha.1
+
+### Minor Changes
+
+- Visual editor with two modes, Edit and Browse. Edit (the default) outlines editable elements on hover with their name, marks other content as not editable, edits texts in place on the page (Enter or leaving the field applies to the draft, Esc cancels) and keeps links from navigating. Browse leaves the site alone so links work, and the editor follows to the next page. E switches mode, Esc clears the selection. New messages `mosto:mode`, `mosto:edit`, `mosto:deselect`; `mosto:init` takes `mode` and `labels`, `mosto:select` reports `inline`.
+
+### Patch Changes
+
+- Updated dependencies
+  - @mosto-cms/overlay@0.1.0-alpha.1
+
 ## 0.1.0-alpha.0
 
 ### Minor Changes
