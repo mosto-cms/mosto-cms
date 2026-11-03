@@ -10,8 +10,10 @@
  *   const handlers = createRouteHandlers(cms);
  *   export const GET = handlers.GET;
  *   export const POST = handlers.POST;
- *   export const runtime = 'nodejs';
- *   export const dynamic = 'force-dynamic';
+ *
+ * Only GET and POST: no `runtime` or `dynamic` segment config, so the route
+ * builds on Next.js 16 with `cacheComponents: true` too (segment configs are
+ * a build error there). Next.js 15+ does not cache route handlers by default.
  *
  * Routes:
  *   POST /api/mosto-cms          the protocol: { op, input } (connector key or editor session)

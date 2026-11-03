@@ -163,3 +163,35 @@ describe('nextRevalidator', () => {
     expect(cache.revalidateTag).not.toHaveBeenCalled();
   });
 });
+
+describe('rootDir (monorepos)', () => {
+  it('githubSource prefixes the repository path but tags the schema path', async () => {
+    const fetchMock = vi.fn(async () => new Response('{"ok":1}', { status: 200 }));
+    const s = githubSource({ owner: 'acme', repo: 'site', rootDir: 'apps/web', fetch: fetchMock as unknown as typeof fetch });
+    expect(await s.readText('content/home.json')).toBe('{"ok":1}');
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit & { next: { tags: string[] } }];
+    expect(url).toBe('https://api.github.com/repos/acme/site/contents/apps/web/content/home.json?ref=main');
+    expect(init.next.tags).toEqual(['mosto-cms', 'mosto-cms:file:content/home.json']);
+    expect(() => githubSource({ owner: 'a', repo: 'b', rootDir: '../up' })).toThrow(/unsafe rootDir/);
+  });
+
+  it('githubSourceFromEnv reads MOSTO_CMS_GITHUB_ROOT_DIR', async () => {
+    const fetchMock = vi.fn(async () => new Response('x', { status: 200 }));
+    const env = { MOSTO_CMS_GITHUB_REPO: 'acme/site', MOSTO_CMS_GITHUB_ROOT_DIR: 'apps/web' };
+    const s = githubSourceFromEnv(env);
+    expect(s?.name).toBe('github');
+    // the source built from env is wired to the real fetch; rebuild with the mock to look at the URL
+    const mocked = githubSource({ owner: 'acme', repo: 'site', rootDir: env.MOSTO_CMS_GITHUB_ROOT_DIR, fetch: fetchMock as unknown as typeof fetch });
+    await mocked.readText('a.json');
+    expect(String((fetchMock.mock.calls[0] as unknown as [string])[0])).toContain('/contents/apps/web/a.json');
+  });
+
+  it('fsSource resolves under root/rootDir', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mosto-next-mono-'));
+    await mkdir(join(root, 'apps/web/content'), { recursive: true });
+    await writeFile(join(root, 'apps/web/content/home.json'), files['content/home.json']);
+    const s = fsSource({ root, rootDir: 'apps/web' });
+    expect(JSON.parse((await s.readText('content/home.json')) ?? 'null').id).toBe('home');
+    expect(() => fsSource({ root, rootDir: '/etc' })).toThrow(/unsafe rootDir/);
+  });
+});

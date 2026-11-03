@@ -138,3 +138,23 @@ describe('fs adapter', () => {
     expect(await code(adapter.readFile('data/tours.json', { at: 'not a sha' }))).toBe('not_found');
   });
 });
+
+describe('fs adapter: rootDir (monorepos)', () => {
+  it('resolves schema paths under root/rootDir', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'mosto-cms-fs-mono-'));
+    mkdirSync(join(root, 'apps/web/data'), { recursive: true });
+    writeFileSync(join(root, 'apps/web/data/tours.json'), TOURS);
+    const adapter = createFsAdapter({ root, rootDir: 'apps/web' });
+    expect((await adapter.readFile('data/tours.json'))?.text).toBe(TOURS);
+    await adapter.commit({
+      message: 'x',
+      files: [{ path: 'data/tours.json', content: { encoding: 'utf8', data: '[]\n' } }],
+    });
+    expect(readFileSync(join(root, 'apps/web/data/tours.json'), 'utf8')).toBe('[]\n');
+    expect(existsSync(join(root, 'data'))).toBe(false);
+  });
+
+  it('refuses an unsafe rootDir', () => {
+    expect(() => createFsAdapter({ root: '/tmp', rootDir: '../up' })).toThrow(/unsafe rootDir/);
+  });
+});

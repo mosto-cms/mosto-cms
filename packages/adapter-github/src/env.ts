@@ -4,6 +4,7 @@
  *
  *   MOSTO_CMS_GITHUB_REPO              owner/repo
  *   MOSTO_CMS_GITHUB_BRANCH            default "main"
+ *   MOSTO_CMS_GITHUB_ROOT_DIR          monorepos: the app directory all content paths live in (e.g. "apps/web")
  *   MOSTO_CMS_GITHUB_TOKEN             a token with contents:write, or the App below
  *   MOSTO_CMS_GITHUB_APP_ID            GitHub App id
  *   MOSTO_CMS_GITHUB_APP_PRIVATE_KEY   its PEM private key ("\n" escapes accepted)
@@ -34,7 +35,14 @@ export function githubOptionsFromEnv(env: Record<string, string | undefined>): G
   } else {
     throw new CmsError('internal', 'MOSTO_CMS_GITHUB_REPO is set but neither MOSTO_CMS_GITHUB_TOKEN nor a GitHub App is configured');
   }
-  return { owner: m[1] as string, repo: m[2] as string, branch: env.MOSTO_CMS_GITHUB_BRANCH?.trim() || 'main', auth };
+  const rootDir = env.MOSTO_CMS_GITHUB_ROOT_DIR?.trim();
+  return {
+    owner: m[1] as string,
+    repo: m[2] as string,
+    branch: env.MOSTO_CMS_GITHUB_BRANCH?.trim() || 'main',
+    auth,
+    ...(rootDir ? { rootDir } : {}),
+  };
 }
 
 export function githubAdapterFromEnv(env: Record<string, string | undefined>): ContentAdapter | null {

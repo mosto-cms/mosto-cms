@@ -1,4 +1,4 @@
-export { createGithubAdapter, type GithubAdapterOptions, type GithubAuth } from './adapter.js';
+export { createGithubAdapter, normalizeRootDir, type GithubAdapterOptions, type GithubAuth } from './adapter.js';
 export {
   createAppJwt,
   createInstallationToken,

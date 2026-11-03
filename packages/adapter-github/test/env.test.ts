@@ -36,3 +36,12 @@ describe('githubOptionsFromEnv', () => {
     expect(() => githubOptionsFromEnv({ MOSTO_CMS_GITHUB_REPO: 'acme/site' })).toThrow(/TOKEN/);
   });
 });
+
+describe('githubOptionsFromEnv: rootDir', () => {
+  it('plumbs MOSTO_CMS_GITHUB_ROOT_DIR through, absent otherwise', () => {
+    expect(
+      githubOptionsFromEnv({ MOSTO_CMS_GITHUB_REPO: 'acme/site', MOSTO_CMS_GITHUB_TOKEN: 't', MOSTO_CMS_GITHUB_ROOT_DIR: 'apps/web' }),
+    ).toMatchObject({ rootDir: 'apps/web' });
+    expect(githubOptionsFromEnv({ MOSTO_CMS_GITHUB_REPO: 'acme/site', MOSTO_CMS_GITHUB_TOKEN: 't' })).not.toHaveProperty('rootDir');
+  });
+});

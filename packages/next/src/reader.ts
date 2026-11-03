@@ -12,8 +12,11 @@
  *
  * Freshness: GitHub reads are cached for `revalidate` seconds AND tagged, and
  * `/api/mosto-cms` expires the tags right after a publish, so the next visit
- * renders the new content. Pages should be ISR (`export const revalidate = …`)
- * or dynamic.
+ * renders the new content. Pages should be ISR (`export const revalidate = …`),
+ * dynamic, or — on Next.js 16 with `cacheComponents: true`, where segment
+ * configs are a build error — read through a `'use cache'` function tagged
+ * `cacheTag(fileTag('content/….json'))` with a `cacheLife(…)` profile: a
+ * publish expires exactly that tag.
  */
 import {
   entryId,
