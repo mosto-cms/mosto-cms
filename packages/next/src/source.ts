@@ -47,6 +47,12 @@ export type GithubSourceOptions = {
   revalidate?: number;
   /** Default https://api.github.com */
   apiUrl?: string;
+  /**
+   * Directory of the repository all content paths live in, for monorepos
+   * (e.g. "apps/web"). Cache tags stay on the schema path, so revalidation
+   * after a publish keeps working. Default: the repository root.
+   */
+  rootDir?: string;
   fetch?: typeof fetch;
 };
 
@@ -55,10 +61,13 @@ export function githubSource(options: GithubSourceOptions): ContentSource {
   const branch = options.branch ?? 'main';
   const revalidate = options.revalidate ?? 60;
   const doFetch = options.fetch ?? globalThis.fetch;
+  const rootDir = (options.rootDir ?? '').trim().replace(/^\/+|\/+$/g, '');
+  if (rootDir && !isSafeRelativePath(rootDir)) throw new Error(`githubSource: unsafe rootDir "${options.rootDir}"`);
 
   async function get(path: string): Promise<Response | null> {
     if (!isSafeRelativePath(path)) return null;
-    const url = `${apiUrl}/repos/${encodeURIComponent(options.owner)}/${encodeURIComponent(options.repo)}/contents/${path
+    const repoPath = rootDir ? `${rootDir}/${path}` : path;
+    const url = `${apiUrl}/repos/${encodeURIComponent(options.owner)}/${encodeURIComponent(options.repo)}/contents/${repoPath
       .split('/')
       .map(encodeURIComponent)
       .join('/')}?ref=${encodeURIComponent(branch)}`;
@@ -91,11 +100,18 @@ export function githubSource(options: GithubSourceOptions): ContentSource {
   };
 }
 
-export type FsSourceOptions = { root: string };
+export type FsSourceOptions = {
+  root: string;
+  /** Subdirectory of `root` all content lives in (monorepos, e.g. "apps/web"). */
+  rootDir?: string;
+};
 
 /** Reads the working copy on disk: local development, and the e2e tests. */
 export function fsSource(options: FsSourceOptions): ContentSource {
-  const root = resolve(options.root);
+  if (options.rootDir !== undefined && !isSafeRelativePath(options.rootDir)) {
+    throw new Error(`fsSource: unsafe rootDir "${options.rootDir}"`);
+  }
+  const root = options.rootDir ? resolve(options.root, options.rootDir) : resolve(options.root);
   async function read(path: string): Promise<Buffer | null> {
     if (!isSafeRelativePath(path)) return null;
     const full = resolve(root, path);
@@ -129,17 +145,20 @@ export function parseRepo(value: string | undefined): { owner: string; repo: str
  * A GitHub source from the standard variables, or null when the repo is not
  * configured (the caller then uses the content bundled at build time):
  *   MOSTO_CMS_GITHUB_REPO=owner/repo, MOSTO_CMS_GITHUB_BRANCH (default main),
- *   MOSTO_CMS_GITHUB_READ_TOKEN (or MOSTO_CMS_GITHUB_TOKEN), MOSTO_CMS_REVALIDATE.
+ *   MOSTO_CMS_GITHUB_READ_TOKEN (or MOSTO_CMS_GITHUB_TOKEN), MOSTO_CMS_REVALIDATE,
+ *   MOSTO_CMS_GITHUB_ROOT_DIR (monorepos, e.g. "apps/web").
  */
 export function githubSourceFromEnv(env: Record<string, string | undefined>): ContentSource | null {
   const repo = parseRepo(env.MOSTO_CMS_GITHUB_REPO);
   if (!repo) return null;
   const token = env.MOSTO_CMS_GITHUB_READ_TOKEN || env.MOSTO_CMS_GITHUB_TOKEN;
   const revalidate = env.MOSTO_CMS_REVALIDATE ? Number(env.MOSTO_CMS_REVALIDATE) : undefined;
+  const rootDir = env.MOSTO_CMS_GITHUB_ROOT_DIR?.trim();
   return githubSource({
     ...repo,
     branch: env.MOSTO_CMS_GITHUB_BRANCH || 'main',
     ...(token ? { token } : {}),
     ...(revalidate !== undefined && Number.isFinite(revalidate) ? { revalidate } : {}),
+    ...(rootDir ? { rootDir } : {}),
   });
 }

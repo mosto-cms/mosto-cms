@@ -28,6 +28,13 @@ export type GithubAdapterOptions = {
   /** Branch content is read from and committed to (e.g. "main"). */
   branch: string;
   auth: GithubAuth;
+  /**
+   * Directory of the repository all content paths live in, for monorepos:
+   * with `rootDir: 'apps/web'`, the schema path `content/home.json` is the
+   * repository file `apps/web/content/home.json`. History entries come back
+   * as schema paths (the prefix is stripped). Default: the repository root.
+   */
+  rootDir?: string;
   /** Default https://api.github.com (set for GitHub Enterprise). */
   apiUrl?: string;
   /** Injected fetch (tests, custom agents). Default: global fetch. */
@@ -53,12 +60,28 @@ function encodePath(path: string): string {
   return path.split('/').map(encodeURIComponent).join('/');
 }
 
+/** "apps/web" from " /apps/web/ ", refusing anything unsafe. Empty for none. */
+export function normalizeRootDir(rootDir: string | undefined): string {
+  const dir = (rootDir ?? '').trim().replace(/^\/+|\/+$/g, '');
+  if (dir && !isSafeRelativePath(dir)) {
+    throw new CmsError('bad_request', `unsafe rootDir "${rootDir}"`);
+  }
+  return dir;
+}
+
 export function createGithubAdapter(options: GithubAdapterOptions): ContentAdapter {
   const apiUrl = (options.apiUrl ?? 'https://api.github.com').replace(/\/+$/, '');
   const doFetch = options.fetch ?? globalThis.fetch;
   const maxAttempts = options.maxAttempts ?? 3;
   const repoUrl = `${apiUrl}/repos/${encodeURIComponent(options.owner)}/${encodeURIComponent(options.repo)}`;
+  const rootDir = normalizeRootDir(options.rootDir);
   let appToken: InstallationToken | null = null;
+
+  /** The repository path of a schema path (validates the schema path first). */
+  function repoPath(path: string): string {
+    if (!isSafeRelativePath(path)) throw new CmsError('bad_request', `unsafe file path "${path}"`);
+    return rootDir ? `${rootDir}/${path}` : path;
+  }
 
   async function token(): Promise<string> {
     if ('token' in options.auth) return options.auth.token;
@@ -106,7 +129,7 @@ export function createGithubAdapter(options: GithubAdapterOptions): ContentAdapt
   async function blobSha(path: string, ref: string): Promise<string | null> {
     const { data } = await call<{ sha: string; type: string } | unknown[]>(
       'GET',
-      `/contents/${encodePath(path)}?ref=${encodeURIComponent(ref)}`,
+      `/contents/${encodePath(repoPath(path))}?ref=${encodeURIComponent(ref)}`,
     );
     if (data == null) return null;
     if (Array.isArray(data)) throw new CmsError('bad_request', `"${path}" is a directory`);
@@ -117,7 +140,7 @@ export function createGithubAdapter(options: GithubAdapterOptions): ContentAdapt
     const ref = opts?.at ?? options.branch;
     const { data } = await call<{ sha: string; content?: string; encoding?: string; size?: number } | unknown[]>(
       'GET',
-      `/contents/${encodePath(path)}?ref=${encodeURIComponent(ref)}`,
+      `/contents/${encodePath(repoPath(path))}?ref=${encodeURIComponent(ref)}`,
     );
     if (data == null) return null;
     if (Array.isArray(data)) throw new CmsError('bad_request', `"${path}" is a directory`);
@@ -156,7 +179,7 @@ export function createGithubAdapter(options: GithubAdapterOptions): ContentAdapt
         content: f.content.data,
         encoding: f.content.encoding === 'base64' ? 'base64' : 'utf-8',
       });
-      tree.push({ path: f.path, mode: '100644', type: 'blob', sha: blob.data!.sha });
+      tree.push({ path: repoPath(f.path), mode: '100644', type: 'blob', sha: blob.data!.sha });
     }
     const newTree = await call<{ sha: string }>('POST', '/git/trees', {
       base_tree: headCommit.data.tree.sha,
@@ -181,7 +204,7 @@ export function createGithubAdapter(options: GithubAdapterOptions): ContentAdapt
 
   async function commit(input: CommitInput): Promise<CommitResult> {
     if (input.files.length === 0) throw new CmsError('bad_request', 'nothing to commit');
-    for (const f of input.files) encodePath(f.path); // refuse unsafe paths up front
+    for (const f of input.files) encodePath(repoPath(f.path)); // refuse unsafe paths up front
     for (let attempt = 1; ; attempt++) {
       try {
         return await commitOnce(input);
@@ -211,7 +234,7 @@ export function createGithubAdapter(options: GithubAdapterOptions): ContentAdapt
     for (const path of paths) {
       const { data } = await call<GitCommit[]>(
         'GET',
-        `/commits?sha=${encodeURIComponent(options.branch)}&path=${encodeURIComponent(encodePath(path))}&per_page=${limit}`,
+        `/commits?sha=${encodeURIComponent(options.branch)}&path=${encodeURIComponent(encodePath(repoPath(path)))}&per_page=${limit}`,
       );
       for (const c of data ?? []) {
         const e = byRevision.get(c.sha) ?? { commit: c, files: [] };
@@ -229,7 +252,12 @@ export function createGithubAdapter(options: GithubAdapterOptions): ContentAdapt
     if (!/^[0-9a-f]{7,64}$/i.test(revision)) return null;
     const { data } = await call<GitCommit>('GET', `/commits/${revision}`);
     if (!data) return null;
-    const files = (data.files ?? []).map((f) => f.filename).filter((f) => paths.includes(f));
+    const prefix = rootDir ? `${rootDir}/` : '';
+    const files = (data.files ?? [])
+      .map((f) => f.filename)
+      .filter((f) => f.startsWith(prefix))
+      .map((f) => f.slice(prefix.length))
+      .filter((f) => paths.includes(f));
     return toEntry(data, files);
   }
 

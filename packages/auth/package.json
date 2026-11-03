@@ -1,6 +1,6 @@
 {
   "name": "@mosto-cms/auth",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-alpha.2",
   "description": "Mosto CMS credentials without a database: editor login (email + password, signed HttpOnly session cookie, rate limiting) and scoped, revocable connector keys signed with the site secret.",
   "license": "MIT",
   "type": "module",

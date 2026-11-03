@@ -30,6 +30,13 @@ export type FsAdapterOptions = {
   /** Directory all paths are relative to (usually the site root). */
   root: string;
   /**
+   * Subdirectory of `root` all content lives in, for monorepos: with
+   * `root: repoRoot` and `rootDir: 'apps/web'`, the schema path
+   * `content/home.json` is the file `<repoRoot>/apps/web/content/home.json`.
+   * Mirrors the GitHub adapter's `rootDir`, so one schema works in both.
+   */
+  rootDir?: string;
+  /**
    * Commit every write with git and enable history/revert. The root must be
    * inside a git working copy. Default false.
    */
@@ -50,7 +57,10 @@ function revisionOf(data: Buffer): string {
 }
 
 export function createFsAdapter(options: FsAdapterOptions): ContentAdapter {
-  const root = resolve(options.root);
+  if (options.rootDir !== undefined && !isSafeRelativePath(options.rootDir)) {
+    throw new CmsError('bad_request', `unsafe rootDir "${options.rootDir}"`);
+  }
+  const root = options.rootDir ? resolve(options.root, options.rootDir) : resolve(options.root);
   const useGit = options.git === true;
 
   async function git(args: string[]): Promise<string> {

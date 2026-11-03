@@ -6,14 +6,19 @@
  *   import { createAdminPage, adminMetadata } from '@mosto-cms/next/admin';
  *   import { cms } from '@/mosto-cms.config';
  *   export const metadata = adminMetadata;
- *   export const dynamic = 'force-dynamic';
  *   export default createAdminPage(cms);
+ *
+ * No route segment config is needed: the page wraps its own runtime work
+ * (the session cookie) in a Suspense boundary, so it builds unchanged on
+ * Next.js 15 and on Next.js 16 with `cacheComponents: true`, where
+ * `export const dynamic` would be a build error.
  *
  * The server reads the session cookie and passes only the signed-in editor
  * (or nobody) to the client; the schema and content are fetched by the
  * interface through `/api/mosto-cms`, after sign-in.
  */
 import { cookies } from 'next/headers';
+import { Suspense } from 'react';
 import type { ReactElement } from 'react';
 
 import { MostoAdmin } from '@mosto-cms/admin';
@@ -37,9 +42,15 @@ function siteName(site: MostoCmsSite): string {
   }
 }
 
+/** The static shell shown while the session cookie is read (and prerendered under cacheComponents). */
+function AdminLoading(): ReactElement {
+  return <main style={{ minHeight: '100vh', background: '#f2ece0' }} aria-busy />;
+}
+
 export function createAdminPage(site: MostoCmsSite, overrides: AdminOptions = {}) {
   const options: AdminOptions = { ...site.admin, ...overrides };
-  return async function MostoCmsAdminPage(props: PageProps): Promise<ReactElement> {
+
+  async function MostoCmsAdminSession(props: PageProps): Promise<ReactElement> {
     const params = (props.searchParams ? await props.searchParams : {}) ?? {};
     const store = await cookies();
     const token = store.get(SESSION_COOKIE_SECURE)?.value ?? store.get(SESSION_COOKIE_DEV)?.value ?? null;
@@ -72,6 +83,16 @@ export function createAdminPage(site: MostoCmsSite, overrides: AdminOptions = {}
         {...(options.poweredBy === false ? { poweredBy: false } : {})}
         {...(options.language ? { language: options.language } : {})}
       />
+    );
+  }
+
+  // The page itself is synchronous and static: cookies (runtime data) are read
+  // inside the Suspense boundary, as Cache Components requires.
+  return function MostoCmsAdminPage(props: PageProps): ReactElement {
+    return (
+      <Suspense fallback={<AdminLoading />}>
+        <MostoCmsAdminSession {...props} />
+      </Suspense>
     );
   };
 }

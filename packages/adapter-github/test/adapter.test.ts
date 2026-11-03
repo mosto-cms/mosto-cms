@@ -224,3 +224,62 @@ describe('github app auth', () => {
     expect(JSON.parse(Buffer.from(payload!, 'base64url').toString())).toEqual({ iat: 999_940, exp: 1_000_540, iss: '123' });
   });
 });
+
+describe('github adapter: rootDir (monorepos)', () => {
+  function monorepo() {
+    const gh = new FakeGithub();
+    gh.commitFiles({ 'apps/web/data/tours.json': TOURS, 'README.md': '# repo' }, 'content');
+    const adapter = createGithubAdapter({
+      owner: 'acme',
+      repo: 'site',
+      branch: 'main',
+      auth: { token: gh.token },
+      fetch: gh.fetch,
+      rootDir: 'apps/web',
+    });
+    return { gh, adapter };
+  }
+
+  it('reads and writes schema paths under the rootDir, one commit', async () => {
+    const { adapter, gh } = monorepo();
+    const f = await adapter.readFile('data/tours.json');
+    expect(f?.text).toBe(TOURS);
+    expect(await adapter.readFile('README.md')).toBeNull(); // outside the rootDir
+
+    const result = await adapter.commit({
+      message: 'Update price',
+      files: [{ path: 'data/tours.json', content: { encoding: 'utf8', data: '[]\n' }, baseRevision: f!.revision }],
+    });
+    expect(result.revision).toMatch(/^[0-9a-f]{40}$/);
+    expect(gh.fileAt('apps/web/data/tours.json')).toBe('[]\n');
+    expect(gh.fileAt('data/tours.json')).toBeUndefined();
+  });
+
+  it('keeps history and revisions on schema paths (prefix stripped)', async () => {
+    const { adapter, gh } = monorepo();
+    gh.commitFiles({ 'apps/web/data/tours.json': '[1]\n', 'other.txt': 'x' }, 'edit');
+    const history = await adapter.history!({ paths: ['data/tours.json'], limit: 10 });
+    expect(history.length).toBeGreaterThan(0);
+    expect(history[0]!.files).toEqual(['data/tours.json']);
+    const rev = await adapter.getRevision!(gh.head()!, { paths: ['data/tours.json'] });
+    expect(rev?.files).toEqual(['data/tours.json']);
+  });
+
+  it('a stale base revision still conflicts through the prefix', async () => {
+    const { adapter, gh } = monorepo();
+    const f = await adapter.readFile('data/tours.json');
+    gh.commitFiles({ 'apps/web/data/tours.json': '[2]\n' }, 'someone else');
+    await expect(
+      adapter.commit({
+        message: 'x',
+        files: [{ path: 'data/tours.json', content: { encoding: 'utf8', data: '[]\n' }, baseRevision: f!.revision }],
+      }),
+    ).rejects.toMatchObject({ code: 'conflict' });
+  });
+
+  it('refuses an unsafe rootDir', () => {
+    expect(() =>
+      createGithubAdapter({ owner: 'a', repo: 'b', branch: 'main', auth: { token: 't' }, rootDir: '../other' }),
+    ).toThrow(/unsafe rootDir/);
+  });
+});
