@@ -1,6 +1,6 @@
 {
   "name": "@mosto-cms/core",
-  "version": "0.1.0-alpha.2",
+  "version": "0.1.0-alpha.3",
   "description": "Mosto CMS core: schema format and validation, field addressing, the field fence and the mosto-cms/1 protocol operations. No dependencies.",
   "license": "MIT",
   "type": "module",

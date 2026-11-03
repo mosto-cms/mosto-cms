@@ -20,4 +20,10 @@ createGithubAdapter({
 });
 ```
 
+Every request has a timeout and transient GitHub failures (no answer, 5xx, 429) are retried
+where repeating is safe; a branch update whose answer was lost is checked on the branch.
+Pass `committer: { name, email }` (env `MOSTO_CMS_GITHUB_COMMITTER="Name <email>"`) to commit
+as an identity your host knows while the editor stays the author: Vercel refuses commits from
+people outside the team.
+
 Supports `history` and `revert`. Node.js 20+. MIT licensed.

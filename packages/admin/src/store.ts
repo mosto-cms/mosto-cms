@@ -17,8 +17,10 @@ import {
   entryKey,
   formatBytes,
   publishMessage,
+  showsPublished,
   storedValue,
   withDraft,
+  withPublished,
   type CollectionInfo,
   type Drafts,
   type EntryData,
@@ -26,6 +28,13 @@ import {
   type FieldValue,
   type SiteInfo,
 } from './model.js';
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** Pause before asking again after a publish without a definite answer. */
+const PUBLISH_RETRY_DELAY = 800;
+/** Waits before each background re-read of a published entry. */
+const SETTLE_DELAYS = [300, 1200, 3000];
 
 class UploadCheck extends Error {
   constructor(message: string) {
@@ -152,29 +161,82 @@ export function useWorkspaceStore(opts: {
     setPreviewNonce((n) => n + 1);
   }, []);
 
+  /**
+   * After a publish: read the published entries again in the background and
+   * keep the fresh copy once it shows the new values. Failures stay silent:
+   * the cache already holds the published values, so there is nothing to
+   * warn about (the storage may lag or hiccup right after a commit).
+   */
+  const settlePublished = useCallback(
+    async (published: Drafts) => {
+      const keys = new Map<string, { collection: string; id: string }>();
+      for (const d of Object.values(published)) keys.set(entryKey(d.collection, d.id), { collection: d.collection, id: d.id });
+      const lists = new Set([...keys.values()].map((k) => k.collection).filter((c) => collections.find((x) => x.key === c)?.type === 'list'));
+      await Promise.all(
+        [...keys].map(async ([key, { collection, id }]) => {
+          for (const wait of SETTLE_DELAYS) {
+            await sleep(wait);
+            try {
+              const r = await client.call<{ revision: string; fields: Record<string, FieldValue | null> }>('getField', { collection, id });
+              const fresh = { revision: r.revision, fields: r.fields };
+              if (!showsPublished(fresh, collection, id, published)) continue;
+              // Keep drafts made meanwhile on top: only the stored copy is replaced.
+              setEntries((e) => (e[key] ? { ...e, [key]: fresh } : e));
+              return;
+            } catch {
+              // try again after the next delay
+            }
+          }
+        }),
+      );
+      for (const collection of lists) {
+        try {
+          const list = await client.call<Array<{ id: string; title: string }>>('listEntries', { collection, locale: lang });
+          setEntryLists((l) => ({ ...l, [collection]: list }));
+        } catch {
+          // titles refresh at the next load
+        }
+      }
+    },
+    [client, collections, lang],
+  );
+
   const publish = useCallback(async () => {
     const current = draftsRef.current;
     if (Object.keys(current).length === 0 || publishing) return;
     setPublishing(true);
     try {
       const message = publishMessage(current, collections, lang, site.locales, t('publish.fallbackMessage'));
-      const r = await client.call<{ published: boolean }>('publish', { message, changes: buildChanges(current) });
+      const input = { message, changes: buildChanges(current) };
+      type Published = { published: boolean; alreadyPublished?: boolean };
+      let r: Published;
+      try {
+        r = await client.call<Published>('publish', input);
+      } catch (err) {
+        // No definite answer (network, timeout, a 5xx) does not mean nothing
+        // was published: the commit may have landed. Publishing is idempotent
+        // (a field already holding its new value is not written again), so
+        // asking once more either publishes now or reports it already did.
+        if (!(err instanceof AdminError) || (err.code !== 'internal' && err.code !== 'network')) throw err;
+        await sleep(PUBLISH_RETRY_DELAY);
+        r = await client.call<Published>('publish', input);
+      }
       // Drafts edited while publishing stay; the published ones go.
       setDrafts((d) => {
         const next = { ...d };
         for (const [k, v] of Object.entries(current)) if (next[k] === v) delete next[k];
         return next;
       });
-      setEntries({});
-      setEntryLists({});
-      toast(r.published ? t('publish.done') : t('publish.nothing'));
+      setEntries((e) => withPublished(e, current));
+      toast(r.published || r.alreadyPublished ? t('publish.done') : t('publish.nothing'));
       setTimeout(() => setPreviewNonce((n) => n + 1), 400);
+      void settlePublished(current);
     } catch (err) {
       onError(err);
     } finally {
       setPublishing(false);
     }
-  }, [client, collections, lang, onError, publishing, site.locales, t, toast]);
+  }, [client, collections, lang, onError, publishing, settlePublished, site.locales, t, toast]);
 
   const upload = useCallback(
     async (file: File, ref: FieldRef, def: ResolvedField, onStage?: (s: 'compressing' | 'uploading') => void): Promise<string> => {

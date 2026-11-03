@@ -150,6 +150,38 @@ describe('workspace', () => {
     expect($('.mc-pending')).toBeNull();
   });
 
+  it('reports a publish that landed as published, even when its answer was lost', async () => {
+    await openForms();
+    await type(document.querySelector<HTMLInputElement>('.mc-content input'), 'Hello there');
+    let publishes = 0;
+    respond = (c) => {
+      if (c.body.op === 'publish') {
+        publishes++;
+        // The first answer is lost (the commit landed); the retry finds the value already live.
+        return publishes === 1 ? fail(500, 'internal') : ok({ published: false, alreadyPublished: true, revision: null, files: [] });
+      }
+      // The storage hiccups right after the commit: the reload must stay silent.
+      if (c.body.op === 'getField') return fail(500, 'internal');
+      return undefined;
+    };
+    await click($('[data-testid=mc-publish]'));
+    await act(async () => new Promise((r) => setTimeout(r, 900)));
+    await flush();
+    expect(publishes).toBe(2);
+    expect($('.mc-toast')?.textContent).toBe('Published. Your site updates in a few seconds.');
+    expect($('.mc-notice')).toBeNull();
+    expect($('.mc-pending')).toBeNull();
+    expect(document.querySelector<HTMLInputElement>('.mc-content input')?.value).toBe('Hello there');
+  });
+
+  it('does not retry a publish the server refused', async () => {
+    await openForms();
+    await type(document.querySelector<HTMLInputElement>('.mc-content input'), 'Mine');
+    respond = (c) => (c.body.op === 'publish' ? fail(409, 'conflict') : undefined);
+    await click($('[data-testid=mc-publish]'));
+    expect(calls.filter((c) => c.body.op === 'publish')).toHaveLength(1);
+  });
+
   it('warns before publishing a value the server would refuse', async () => {
     await openForms();
     await type(document.querySelector<HTMLInputElement>('.mc-content input'), 'x'.repeat(41));

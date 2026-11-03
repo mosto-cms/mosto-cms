@@ -155,6 +155,13 @@ async function protocol(site: MostoCmsSite, request: Request): Promise<Response>
     return errorResponse(err);
   }
   const { status, body: out } = await handleRequest(cms, body);
+  if (!out.ok && status >= 500) {
+    // Server-side failures (storage unreachable, misconfiguration) are logged
+    // so they show up in the host's function logs; the message carries no secrets.
+    console.error(`[mosto-cms] ${String((body as { op?: unknown })?.op)} failed: ${out.error.message}`);
+  }
+  // A write that succeeded stays a success: nothing after the commit can turn
+  // it into an error response (see afterWrite).
   await afterWrite(site, body, out);
   return respond(status, out);
 }

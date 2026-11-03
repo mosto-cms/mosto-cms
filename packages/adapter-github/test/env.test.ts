@@ -18,6 +18,16 @@ describe('githubOptionsFromEnv', () => {
     expect(githubAdapterFromEnv({ MOSTO_CMS_GITHUB_REPO: 'acme/site', MOSTO_CMS_GITHUB_TOKEN: 't' })?.name).toBe('github');
   });
 
+  it('reads an optional committer as "Name <email>" and refuses anything else', () => {
+    const base = { MOSTO_CMS_GITHUB_REPO: 'acme/site', MOSTO_CMS_GITHUB_TOKEN: 't' };
+    expect(githubOptionsFromEnv({ ...base, MOSTO_CMS_GITHUB_COMMITTER: ' Site bot <123+bot@users.noreply.github.com> ' })?.committer).toEqual({
+      name: 'Site bot',
+      email: '123+bot@users.noreply.github.com',
+    });
+    expect(githubOptionsFromEnv({ ...base, MOSTO_CMS_GITHUB_COMMITTER: '' })?.committer).toBeUndefined();
+    expect(() => githubOptionsFromEnv({ ...base, MOSTO_CMS_GITHUB_COMMITTER: 'bot@example.com' })).toThrow(/Name <email>/);
+  });
+
   it('prefers a GitHub App when configured', () => {
     const o = githubOptionsFromEnv({
       MOSTO_CMS_GITHUB_REPO: 'acme/site',

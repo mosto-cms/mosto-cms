@@ -173,7 +173,7 @@ nothing is kept between calls, so they run as serverless functions.
 | `listEntries` | `{ collection, locale? }` | `[{ id, title }]` | no |
 | `getField` | `{ collection, id, path? }` | with `path`: `{ collection, id, path, kind, value, revision }`; without: `{ collection, id, revision, fields: { <path>: value } }` (declared fields only) | no |
 | `previewChange` | `{ changes: Change[] }` | `{ changes: ChangeResult[], revisions: { <file>: <revision> } }` | no |
-| `publish` | `{ changes: Change[], message?, baseRevisions? }` | `{ published, revision, url?, files, changes: ChangeResult[] }` | yes, one commit |
+| `publish` | `{ changes: Change[], message?, baseRevisions? }` | `{ published, alreadyPublished?, revision, url?, files, changes: ChangeResult[] }` | yes, one commit |
 | `uploadAsset` | `{ filename, contentType, dataBase64, field? }` | `{ path, file, bytes, revision }` | yes, one commit |
 | `history` | `{ limit?, collection? }` | `{ entries: [{ revision, parent, message, author, date, files }] }`, newest first, `limit` 1-100 (default 20) | no |
 | `revert` | `{ revision, message?, force? }` | as `publish`, plus `reverted` | yes, one commit |
@@ -196,7 +196,11 @@ type ChangeResult = {
   across several files, or none. If no value actually changes, nothing is committed and
   `published` is `false`.
 - **Conflicts.** A change MAY carry `before`, the value the caller last saw; if the field holds
-  something else now, `conflict`. `publish` MAY carry `baseRevisions` (as returned by
+  something else now, `conflict`, unless it already holds the requested `value`: that
+  change is then already applied (`changed: false`), not a conflict. So repeating a
+  `publish` whose answer was lost is safe: nothing is committed twice and the result has
+  `published: false, alreadyPublished: true`. Clients SHOULD retry a `publish` that got no
+  definite answer (network error, 5xx) once before reporting a failure. `publish` MAY carry `baseRevisions` (as returned by
   `previewChange`); if any of those files changed since, `conflict` (strict mode). Without
   either, a concurrent commit to the same file is detected by the storage, the server re-reads
   and applies the changes again once, and never overwrites a field whose `before` no longer
