@@ -3,8 +3,10 @@
 The click-to-edit layer of [Mosto CMS](https://github.com/mosto-cms/mosto-cms). It runs on the
 live site and does nothing for normal visitors: it wakes up only when the page is opened as
 `?mostoEdit=1` inside the `/admin` iframe and the admin completes the handshake from an allowed
-origin. Then annotated elements are highlighted, a click (or Enter) selects one, and the admin
-can update it in place while the editor types. No dependencies, about 3 KB minified.
+origin. In Edit mode annotated elements are outlined on hover with their name, a click (or
+Enter) selects one, texts are edited in place (`contenteditable`, Enter applies, Esc cancels)
+and links do not navigate; in Browse mode the page behaves normally. The admin can also update
+any field in place while the editor types in its panel. No dependencies.
 
 ```tsx
 import { mostoField } from '@mosto-cms/overlay';

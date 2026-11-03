@@ -146,6 +146,58 @@ describe('/admin on desktop', () => {
     expect(await frame.locator('h1').textContent()).toBe('Pasta, rolled by hand');
   });
 
+  it('Edit mode: hover names the field, typing on the page goes to the draft, Esc cancels', async () => {
+    const name = frame.locator('h3').first();
+    const original = (await name.textContent()) ?? '';
+    await name.hover();
+    await expect.poll(() => frame.locator('#mosto-cms-chip').textContent()).toBe('Name');
+    await frame.locator('h2').hover(); // "Menu" is not a field
+    await expect.poll(() => frame.locator('#mosto-cms-chip').textContent()).toBe('Not editable');
+
+    await name.click();
+    await expect.poll(() => name.getAttribute('contenteditable')).not.toBeNull();
+    await page.getByRole('heading', { name: 'Name' }).waitFor();
+    await page.keyboard.press('ControlOrMeta+A');
+    await page.keyboard.type('Ravioli, by hand');
+    await shot(page, 'desktop-3b-inline-editing');
+    await page.keyboard.press('Enter');
+    await expect.poll(() => name.getAttribute('contenteditable')).toBeNull();
+    expect(await name.textContent()).toBe('Ravioli, by hand');
+    await page.locator('.mc-pending', { hasText: '1 unpublished change' }).waitFor();
+    await expect.poll(() => page.locator('.mc-panel input').first().inputValue()).toBe('Ravioli, by hand');
+
+    await name.click();
+    await page.keyboard.type(' oops');
+    await page.keyboard.press('Escape');
+    expect(await name.textContent()).toBe('Ravioli, by hand');
+
+    // Links do not navigate in Edit mode.
+    await frame.getByRole('link', { name: 'Italiano' }).click();
+    expect(await frame.locator('main').getAttribute('lang')).toBe('en');
+
+    page.once('dialog', (d) => void d.accept());
+    await page.getByRole('button', { name: 'Discard' }).click();
+    await expect.poll(() => frame.locator('h3').first().textContent()).toBe(original);
+  });
+
+  it('Browse mode: links work and the editor follows; E switches back to Edit', async () => {
+    await page.getByTestId('mc-mode-browse').click();
+    const htmlClass = async () => (await frame.locator('html').getAttribute('class')) ?? '';
+    await expect.poll(htmlClass).not.toContain('mosto-cms-edit');
+    await shot(page, 'desktop-3c-browse');
+    await frame.getByRole('link', { name: 'Italiano' }).click();
+    await expect.poll(() => frame.locator('main').getAttribute('lang'), { timeout: 15_000 }).toBe('it');
+    await page.locator('iframe.mc-frame[data-status="ready"]').waitFor({ timeout: 15_000 });
+    await expect.poll(() => page.locator('.mc-toolbar select').inputValue()).toBe('/it');
+    expect(await htmlClass()).not.toContain('mosto-cms-edit');
+    await frame.getByRole('link', { name: 'English' }).click();
+    await expect.poll(() => frame.locator('main').getAttribute('lang'), { timeout: 15_000 }).toBe('en');
+    await page.locator('.mc-brand').click();
+    await page.keyboard.press('e');
+    await expect.poll(() => page.getByTestId('mc-mode-edit').getAttribute('aria-pressed')).toBe('true');
+    await expect.poll(htmlClass).toContain('mosto-cms-edit');
+  });
+
   it('gallery: the click selects the visible photo (per-index address)', async () => {
     await frame.getByTestId('gallery-next').click();
     // Frames are stacked; wait for the fade, then click where they all are.

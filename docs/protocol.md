@@ -334,11 +334,28 @@ Every message is an object with `type` and `v` (protocol message version, `1`).
 | Direction | `type` | Payload |
 |---|---|---|
 | site → admin | `mosto:overlay-loaded` | none. Sent once when the overlay starts, to `window.parent`, addressed to each allowed admin origin (the browser delivers it only if the parent has one of them). The only message sent before the handshake. |
-| admin → site | `mosto:init` | `{ locale? }` |
+| admin → site | `mosto:init` | `{ locale?, mode?, labels? }`: `locale` is the admin's language (for the overlay's own hints), `mode` the starting mode (`edit` when absent), `labels` the field names shown on hover, keyed by `collection:path` (a list item falls back to its list). |
 | site → admin | `mosto:ready` | `{ fields: number, url?: string }` (annotated elements found; the page path without `mostoEdit`) |
-| site → admin | `mosto:select` | `{ field: { collection, id, path, kind }, value, rect: { top, left, width, height } }` |
+| site → admin | `mosto:select` | `{ field: { collection, id, path, kind }, value, rect: { top, left, width, height }, inline? }`; `inline: true` when the text is now being edited in place on the page (the admin must not take the focus) |
+| site → admin | `mosto:edit` | `{ field, value }`: a text edited in place was applied (Enter or leaving the field). The admin treats it as an edit of that field: a draft until `publish`. |
+| site → admin | `mosto:deselect` | none: the editor cleared the selection on the page (Esc). |
 | admin → site | `mosto:set` | `{ field: { collection, id, path, kind }, value }`: optimistic, in-place update of the page. A list value also updates the elements annotated per item (`<path>.<i>`). |
 | admin → site | `mosto:highlight` | `{ field \| null }`: scroll to and outline a field, or clear the outline |
+| both | `mosto:mode` | `{ mode: 'edit' \| 'browse' }`. admin → site: switch mode. site → admin: the editor pressed the mode shortcut (E) on the page; the admin decides and answers with its own `mosto:mode`. |
+
+### 5.1.1 Edit and Browse
+
+The visual editor has two modes. A site that predates them stays in Edit, which is the
+behaviour of earlier versions.
+
+- **Edit** (default): hovering an annotated element outlines it and shows its name; other
+  content shows a "not editable" hint. A click selects the element. A `text` or `multiline`
+  element that holds only text is edited in place (`contenteditable`): Enter applies
+  (Shift+Enter is a new line in a `multiline` field), leaving the element applies, Esc
+  restores the text. Links do not navigate and forms do not submit; other controls (a carousel
+  arrow) keep working. Esc clears the selection, E asks to switch mode.
+- **Browse**: the overlay changes nothing on the page, so links and controls work. A link to
+  the same site keeps `?mostoEdit=1`, so the next page stays in the editor.
 
 ### 5.2 Origin checks
 

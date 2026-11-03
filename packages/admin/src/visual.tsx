@@ -1,20 +1,36 @@
 /**
- * Visual mode: the site in an iframe, opened with `?mostoEdit=1`. The overlay
- * on the page reports clicks (`mosto:select`); the side panel (a bottom sheet
- * on phones) edits the field, and every keystroke is mirrored on the page
- * with `mosto:set`. Messages are accepted only from the iframe's window and
- * the site's origin.
+ * Visual mode: the site in an iframe, opened with `?mostoEdit=1`, in one of
+ * two modes. Edit (the default): the overlay outlines what can be changed,
+ * reports clicks (`mosto:select`) and texts edited in place (`mosto:edit`,
+ * which go to the drafts); the side panel (a bottom sheet on phones) edits
+ * the selected field and every keystroke is mirrored on the page with
+ * `mosto:set`. Browse: the site behaves normally so links work. E switches.
+ * Messages are accepted only from the iframe's window and the site's origin.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { ResolvedField } from '@mosto-cms/core';
-import { MESSAGE_VERSION, readMessage, type AdminMessage, type SelectedField } from '@mosto-cms/overlay';
+import { MESSAGE_VERSION, readMessage, type AdminMessage, type EditorMode, type SelectedField } from '@mosto-cms/overlay';
 
 import { useStore, useUi } from './context.js';
 import { FieldEditor } from './field-editor.js';
-import { entryKey, fieldDef, labelFor, prettyPath, siblingPaths, splitLocale, type FieldRef, type FieldValue } from './model.js';
+import { entryKey, fieldDef, labelFor, prettyPath, siblingPaths, splitLocale, storedValue, type CollectionInfo, type FieldRef, type FieldValue } from './model.js';
 
 export type PreviewPage = { path: string; label?: string };
+
+/** Field names for the hover label on the page, keyed by `collection:path`. */
+export function overlayLabels(collections: CollectionInfo[], lang: string, locales: string[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const c of collections) {
+    for (const f of c.fields) out[`${c.key}:${f.path}`] = labelFor(f.label, lang, locales) || prettyPath(f.path, locales);
+  }
+  return out;
+}
+
+function isTyping(target: EventTarget | null): boolean {
+  const t = target as HTMLElement | null;
+  return !!t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName ?? ''));
+}
 
 function withEditParams(path: string, nonce: number): string {
   const u = new URL(path, 'http://x');
@@ -32,8 +48,16 @@ export function VisualMode({ pages, siteOrigin }: { pages: PreviewPage[]; siteOr
   const [statusFor, setStatusFor] = useState<{ src: string; status: 'loading' | 'ready' | 'noOverlay' }>({ src: '', status: 'loading' });
   const [fields, setFields] = useState(0);
   const [device, setDevice] = useState<'desktop' | 'phone'>('desktop');
-  const [selected, setSelected] = useState<(SelectedField & { def: ResolvedField }) | null>(null);
+  const [selected, setSelected] = useState<(SelectedField & { def: ResolvedField; inline: boolean }) | null>(null);
   const [notEditable, setNotEditable] = useState(false);
+  const [mode, setModeState] = useState<EditorMode>('edit');
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
+  // Where the page really is: following a link in Browse moves it.
+  const [currentPath, setCurrentPath] = useState<string | null>(null);
+  const labels = useMemo(() => overlayLabels(store.collections, lang, store.site.locales), [store.collections, lang, store.site.locales]);
+  const labelsRef = useRef(labels);
+  labelsRef.current = labels;
   const panelHeading = useRef<HTMLHeadingElement>(null);
   const src = useMemo(() => withEditParams(path, store.previewNonce), [path, store.previewNonce]);
   const srcRef = useRef(src);
@@ -60,6 +84,30 @@ export function VisualMode({ pages, siteOrigin }: { pages: PreviewPage[]; siteOr
   const draftsRef = useRef(store.drafts);
   draftsRef.current = store.drafts;
 
+  const setMode = useCallback(
+    (next: EditorMode) => {
+      setModeState(next);
+      post({ type: 'mosto:mode', v: MESSAGE_VERSION, mode: next });
+      if (next === 'browse') {
+        setSelected(null);
+        setNotEditable(false);
+      }
+    },
+    [post],
+  );
+
+  // E switches mode, also while the focus is on the page (the overlay asks).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target)) return;
+      if (e.key !== 'e' && e.key !== 'E') return;
+      e.preventDefault();
+      setMode(modeRef.current === 'edit' ? 'browse' : 'edit');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [setMode]);
+
   useEffect(() => {
     function onMessage(event: MessageEvent) {
       if (!frame.current || event.source !== frame.current.contentWindow) return;
@@ -67,10 +115,11 @@ export function VisualMode({ pages, siteOrigin }: { pages: PreviewPage[]; siteOr
       const m = readMessage(event.data);
       if (!m) return;
       if (m.type === 'mosto:overlay-loaded') {
-        post({ type: 'mosto:init', v: MESSAGE_VERSION, locale: lang });
+        post({ type: 'mosto:init', v: MESSAGE_VERSION, locale: lang, mode: modeRef.current, labels: labelsRef.current });
       } else if (m.type === 'mosto:ready') {
         setStatusFor({ src: srcRef.current, status: 'ready' });
         setFields(m.fields);
+        if (m.url) setCurrentPath(m.url);
         // The page was reloaded: show the unpublished edits on it again.
         for (const d of Object.values(draftsRef.current)) {
           post({ type: 'mosto:set', v: MESSAGE_VERSION, field: { collection: d.collection, id: d.id, path: d.path, kind: d.kind }, value: d.value });
@@ -83,13 +132,28 @@ export function VisualMode({ pages, siteOrigin }: { pages: PreviewPage[]; siteOr
           return;
         }
         setNotEditable(false);
-        setSelected({ ...m.field, kind: def.kind, def });
+        setSelected({ ...m.field, kind: def.kind, def, inline: m.inline === true });
         void store.loadEntry(m.field.collection, m.field.id);
+      } else if (m.type === 'mosto:edit') {
+        // A text typed in place on the page: it becomes a draft like any edit.
+        const def = fieldDef(store.collections, m.field);
+        if (!def || (def.kind !== 'text' && def.kind !== 'multiline')) return;
+        const ref = { collection: m.field.collection, id: m.field.id, path: m.field.path };
+        void store.loadEntry(ref.collection, ref.id).then((data) => {
+          if (!data) return;
+          if ((store.valueOf(ref) ?? storedValue(data, ref.path)) === m.value) return;
+          store.edit(ref, def, m.value, data);
+        });
+      } else if (m.type === 'mosto:deselect') {
+        setSelected(null);
+        setNotEditable(false);
+      } else if (m.type === 'mosto:mode') {
+        setMode(m.mode);
       }
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [lang, post, siteOrigin, store]);
+  }, [lang, post, setMode, siteOrigin, store]);
 
   // No overlay answering a few seconds after the page loaded: say so.
   const onLoad = () => {
@@ -99,8 +163,9 @@ export function VisualMode({ pages, siteOrigin }: { pages: PreviewPage[]; siteOr
     }, 5000);
   };
 
+  // A text edited in place keeps the focus on the page.
   useEffect(() => {
-    if (selected) panelHeading.current?.focus();
+    if (selected && !selected.inline) panelHeading.current?.focus();
   }, [selected?.collection, selected?.id, selected?.path]);
 
   const close = () => {
@@ -111,7 +176,7 @@ export function VisualMode({ pages, siteOrigin }: { pages: PreviewPage[]; siteOr
   useEffect(() => {
     if (!selected) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
+      if (e.key === 'Escape' && !isTyping(e.target)) close();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -132,16 +197,39 @@ export function VisualMode({ pages, siteOrigin }: { pages: PreviewPage[]; siteOr
     if (selected && !entry) void store.loadEntry(selected.collection, selected.id);
   }, [selected?.collection, selected?.id, entry]);
 
-  const pageOptions = pages.length > 1 || !pages.some((p) => p.path === path) ? [...pages, ...(pages.some((p) => p.path === path) ? [] : [{ path }])] : pages;
+  const shown = currentPath && statusFor.src === src && status === 'ready' ? currentPath : path;
+  const known = (p: string) => pages.some((x) => x.path === p);
+  const pageOptions = [...pages, ...(known(path) ? [] : [{ path }]), ...(shown !== path && !known(shown) ? [{ path: shown }] : [])];
+  const hint = touch ? t('visual.hintTouch') : mode === 'browse' ? t('visual.hintBrowse') : t('visual.hintEdit');
 
   return (
     <div className="mc-visual">
       <section className="mc-stage" aria-label={t('visual.preview')}>
         <div className="mc-toolbar">
+          <div className="mc-modes" role="group" aria-label={t('visual.mode')} title={t('visual.mode.shortcut')} data-testid="mc-modes">
+            <button type="button" aria-pressed={mode === 'browse'} onClick={() => setMode('browse')} data-testid="mc-mode-browse">
+              {t('visual.mode.browse')}
+            </button>
+            <button type="button" aria-pressed={mode === 'edit'} onClick={() => setMode('edit')} data-testid="mc-mode-edit">
+              {t('visual.mode.edit')}
+            </button>
+          </div>
+          {!touch ? (
+            <span className="mc-kbd" aria-hidden="true" title={t('visual.mode.shortcut')}>
+              E
+            </span>
+          ) : null}
           {pageOptions.length > 1 ? (
-            <label className="mc-row" style={{ gap: 6 }}>
+            <label className="mc-row" style={{ gap: 6, marginLeft: 8 }}>
               <span className="mc-small mc-muted">{t('visual.page')}</span>
-              <select value={path} onChange={(e) => setPath(e.target.value)}>
+              <select
+                value={shown}
+                onChange={(e) => {
+                  setCurrentPath(null);
+                  if (e.target.value === path) store.bumpPreview();
+                  setPath(e.target.value);
+                }}
+              >
                 {pageOptions.map((p) => (
                   <option key={p.path} value={p.path}>
                     {p.label ?? p.path}
@@ -182,11 +270,11 @@ export function VisualMode({ pages, siteOrigin }: { pages: PreviewPage[]; siteOr
 
       {!selected ? (
         <div className="mc-hint" role="status">
-          {notEditable ? t('visual.notEditable') : status === 'ready' && fields === 0 ? t('visual.noFields') : status === 'loading' ? t('visual.loading') : touch ? t('visual.hintTouch') : t('visual.hint')}
+          {notEditable ? t('visual.notEditable') : status === 'ready' && fields === 0 ? t('visual.noFields') : status === 'loading' ? t('visual.loading') : hint}
         </div>
       ) : null}
 
-      <aside className={`mc-panel${selected ? ' mc-panel-open' : ''}`} aria-label={selected ? labelFor(selected.def.label, lang, store.site.locales) : t('visual.hint')}>
+      <aside className={`mc-panel${selected ? ' mc-panel-open' : ''}`} aria-label={selected ? labelFor(selected.def.label, lang, store.site.locales) : hint}>
         <div className="mc-sheet-handle" aria-hidden="true" />
         {selected && collection ? (
           <>
@@ -216,8 +304,9 @@ export function VisualMode({ pages, siteOrigin }: { pages: PreviewPage[]; siteOr
                   def={selected.def}
                   locale={siblings.length > 0 ? selLocale : null}
                   hideLabel
-                  autoFocus={!touch}
+                  autoFocus={!touch && !selected.inline}
                 />
+                {selected.inline ? <p className="mc-tip mc-muted">{t('visual.inlineTip')}</p> : null}
                 {siblings.length > 0 ? (
                   <div className="mc-siblings">
                     <span className="mc-eyebrow">{t('visual.otherLanguages')}</span>
@@ -232,7 +321,7 @@ export function VisualMode({ pages, siteOrigin }: { pages: PreviewPage[]; siteOr
           </>
         ) : (
           <div className="mc-panel-empty">
-            <h2>{touch ? t('visual.hintTouch') : t('visual.hint')}</h2>
+            <h2>{hint}</h2>
             {status === 'noOverlay' ? <p className="mc-muted">{t('visual.noOverlay')}</p> : null}
             {status === 'ready' && fields === 0 ? <p className="mc-muted">{t('visual.noFields')}</p> : null}
             {notEditable ? <p className="mc-muted">{t('visual.notEditable')}</p> : null}

@@ -1,5 +1,14 @@
 # @mosto-cms/next
 
+## 0.1.0-alpha.1
+
+### Patch Changes
+
+- The `/admin` it mounts and `<MostoOverlay/>` get the Edit and Browse modes with in-place text editing.
+- Updated dependencies
+  - @mosto-cms/admin@0.1.0-alpha.1
+  - @mosto-cms/overlay@0.1.0-alpha.1
+
 ## 0.1.0-alpha.0
 
 ### Minor Changes
