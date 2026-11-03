@@ -188,6 +188,19 @@ describe('publish', () => {
     expect((await cms.history()).entries).toHaveLength(1);
   });
 
+  it('is idempotent: repeating a publish that already landed commits nothing and says so', async () => {
+    const { cms } = setup();
+    const change = { collection: 'tours', id: 'giro-isola', path: 'price', value: '€ 125', before: '€ 120' };
+    const first = await cms.publish({ message: 'Price', changes: [change] });
+    expect(first.published).toBe(true);
+    // The same call again, e.g. after its answer was lost: no second commit, no conflict.
+    const again = await cms.publish({ message: 'Price', changes: [change] });
+    expect(again).toMatchObject({ published: false, alreadyPublished: true, revision: null, files: [] });
+    expect((await cms.history()).entries.filter((e) => e.message === 'Price')).toHaveLength(1);
+    // A different value over a stale `before` is still a conflict.
+    await expectCode(cms.publish({ changes: [{ ...change, value: '€ 999' }] }), 'conflict');
+  });
+
   it('refuses duplicate changes to the same field', async () => {
     const { cms } = setup();
     const c = { collection: 'tours', id: 'giro-isola', path: 'price', value: '€ 1' };

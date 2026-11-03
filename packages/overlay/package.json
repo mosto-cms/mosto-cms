@@ -1,6 +1,6 @@
 {
   "name": "@mosto-cms/overlay",
-  "version": "0.1.0-alpha.2",
+  "version": "0.1.0-alpha.3",
   "description": "Mosto CMS click-to-edit overlay for the live site: highlights annotated elements inside the /admin iframe and talks to it over a versioned, origin-checked postMessage protocol. Plus mostoField() to write annotations. No dependencies.",
   "license": "MIT",
   "type": "module",

@@ -216,10 +216,48 @@ MOSTO_CMS_GITHUB_TOKEN=...              # fine-grained token, contents: read and
 # or a GitHub App you own: MOSTO_CMS_GITHUB_APP_ID, MOSTO_CMS_GITHUB_APP_PRIVATE_KEY
 # monorepo where the app is not the repo root (see "Monorepos" below):
 # MOSTO_CMS_GITHUB_ROOT_DIR=apps/web
+# optional git committer of every commit, the editor stays the author (see "No rebuilds" below):
+# MOSTO_CMS_GITHUB_COMMITTER="Your name <12345+you@users.noreply.github.com>"
 ```
 
 After a publish, `/api/mosto-cms` expires the cached content and pages, so the next visit
 shows the change in seconds; your host also rebuilds from the new commit as usual.
+
+GitHub is reached over the network: every request has a timeout, reads are retried after a
+transient failure (no answer, a 5xx, a 429), and a commit whose answer was lost is checked
+on the branch before anything is reported. `publish` is idempotent, so the admin asks once
+more when it got no definite answer: a commit that landed is always reported as published,
+never twice committed. Server-side failures are logged as `[mosto-cms] <op> failed: …` in
+your host's function logs.
+
+### No rebuilds for content commits (Vercel)
+
+Pages read published content live, so a content commit needs no new build. Two settings
+skip it while code commits keep deploying as usual:
+
+1. **A committer your host knows.** Vercel refuses (`BLOCKED`) a commit whose committer is
+   not a member of the team, and it checks that *before* any build setting. Editors are not
+   team members, so set `MOSTO_CMS_GITHUB_COMMITTER` to a team member's GitHub identity (their
+   `users.noreply.github.com` address works) or a bot your team includes. The editor stays
+   the commit author, and the history in `/admin` keeps showing who changed what.
+2. **An Ignored Build Step** that skips commits touching only content and uploads. In the
+   app's `vercel.json` (with your content and media directories, repository-root relative):
+
+   ```json
+   {
+     "ignoreCommand": "B=\"${VERCEL_GIT_PREVIOUS_SHA:-HEAD^}\"; git cat-file -e \"$B^{commit}\" 2>/dev/null || exit 1; git diff --quiet \"$B\" HEAD -- ':(top)' ':(top,exclude)content' ':(top,exclude)public/uploads'"
+   }
+   ```
+
+   It compares with the last deployed commit (or the previous one) and exits 0, which
+   means skip, only when nothing outside those directories changed. If that commit is not
+   in the clone, it builds. Vercel then lists the content commit as *Canceled* by the
+   Ignored Build Step, without building it; a code commit, or a push mixing code and
+   content, deploys as usual.
+
+On Netlify the equivalent is the `ignore` command in `netlify.toml` (`[build] ignore =
+"git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- . ':(exclude)content'"`); Netlify does not
+check the committer.
 
 **Private repository?** Uploaded images are not in the deployed bundle until the next build.
 Serve them right away with the media proxy, and set `"media": { "publicPath": "/media" }` in

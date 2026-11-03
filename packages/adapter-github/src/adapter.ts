@@ -7,10 +7,17 @@
  * sha): if the file moved on since, the commit is refused with `conflict`.
  * If the branch moved for unrelated reasons, the commit is rebuilt on the new
  * head (base revisions are re-checked) a few times before giving up.
+ *
+ * GitHub is reached over the network and is sometimes slow or briefly down:
+ * every request has a timeout, and a transient failure (no answer, a 5xx, a
+ * 429) is retried when the request is safe to repeat. Reads, blobs and trees
+ * are; a branch update is never blindly repeated: after a lost answer the
+ * branch is read back to learn whether the commit landed.
  */
 import {
   CmsError,
   isSafeRelativePath,
+  type CommitAuthor,
   type CommitInput,
   type CommitResult,
   type ContentAdapter,
@@ -41,6 +48,20 @@ export type GithubAdapterOptions = {
   fetch?: typeof fetch;
   /** Attempts to rebuild a commit when the branch moved meanwhile. Default 3. */
   maxAttempts?: number;
+  /**
+   * Git committer of every commit (the author stays the editor or connector).
+   * Hosts that check who pushed a commit before building it (Vercel refuses
+   * commits by people outside the team) accept the commit when this is an
+   * identity they know, e.g. the GitHub noreply email of a team member or a
+   * bot. Default: the author.
+   */
+  committer?: CommitAuthor;
+  /** Timeout of one GitHub request, in ms. Default 15000. */
+  requestTimeoutMs?: number;
+  /** Extra attempts for a request that failed transiently (no answer, 5xx, 429). Default 2. */
+  retries?: number;
+  /** First delay between attempts, in ms, doubled each time. Default 400. */
+  retryDelayMs?: number;
 };
 
 type GitCommit = {
@@ -52,6 +73,13 @@ type GitCommit = {
 };
 
 const NOT_FAST_FORWARD = Symbol('not-fast-forward');
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** A failure that may succeed if repeated: no answer, a timeout, a 5xx or a 429. */
+function isTransient(err: unknown): boolean {
+  return err instanceof CmsError && err.details?.transient === true;
+}
 
 function encodePath(path: string): string {
   if (!isSafeRelativePath(path)) {
@@ -73,6 +101,9 @@ export function createGithubAdapter(options: GithubAdapterOptions): ContentAdapt
   const apiUrl = (options.apiUrl ?? 'https://api.github.com').replace(/\/+$/, '');
   const doFetch = options.fetch ?? globalThis.fetch;
   const maxAttempts = options.maxAttempts ?? 3;
+  const requestTimeoutMs = options.requestTimeoutMs ?? 15_000;
+  const retries = Math.max(0, options.retries ?? 2);
+  const retryDelayMs = Math.max(0, options.retryDelayMs ?? 400);
   const repoUrl = `${apiUrl}/repos/${encodeURIComponent(options.owner)}/${encodeURIComponent(options.repo)}`;
   const rootDir = normalizeRootDir(options.rootDir);
   let appToken: InstallationToken | null = null;
@@ -97,17 +128,55 @@ export function createGithubAdapter(options: GithubAdapterOptions): ContentAdapt
     return appToken.token;
   }
 
-  async function call<T>(method: string, path: string, body?: unknown): Promise<{ status: number; data: T | null }> {
-    const res = await doFetch(`${repoUrl}${path}`, {
-      method,
-      headers: {
-        Authorization: `Bearer ${await token()}`,
-        Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-      },
-      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-    });
+  /**
+   * One GitHub request. `retry` (default: GET only) repeats it after a
+   * transient failure; the error it finally throws carries `transient: true`
+   * when GitHub never gave a definite answer.
+   */
+  async function call<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    opts: { retry?: boolean } = {},
+  ): Promise<{ status: number; data: T | null }> {
+    const attempts = (opts.retry ?? method === 'GET') ? retries + 1 : 1;
+    let last: unknown;
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      if (attempt > 1) await sleep(retryDelayMs * 2 ** (attempt - 2));
+      try {
+        return await callOnce<T>(method, path, body);
+      } catch (err) {
+        if (!isTransient(err)) throw err;
+        last = err;
+      }
+    }
+    throw last;
+  }
+
+  async function callOnce<T>(method: string, path: string, body?: unknown): Promise<{ status: number; data: T | null }> {
+    const where = `${method} ${path.split('?')[0]}`;
+    const transient = (message: string) => new CmsError('internal', message, { transient: true });
+    let res: Response;
+    try {
+      res = await doFetch(`${repoUrl}${path}`, {
+        method,
+        headers: {
+          Authorization: `Bearer ${await token()}`,
+          Accept: 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+          ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        },
+        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+        signal: AbortSignal.timeout(requestTimeoutMs),
+      });
+    } catch (err) {
+      if (err instanceof CmsError) throw err;
+      throw transient(`GitHub did not answer ${where}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    if (res.status >= 500 || res.status === 429) {
+      const text = await res.text().catch(() => '');
+      throw transient(`GitHub ${where} failed: ${res.status} ${text.slice(0, 200)}`);
+    }
     if (res.status === 401 || res.status === 403) {
       throw new CmsError('internal', `GitHub refused the site credentials (${res.status}) on ${method} ${path.split('?')[0]}`);
     }
@@ -121,9 +190,15 @@ export function createGithubAdapter(options: GithubAdapterOptions): ContentAdapt
       throw new CmsError('internal', `GitHub ${method} ${path.split('?')[0]} failed: ${res.status} ${text.slice(0, 200)}`);
     }
     if (!res.ok) {
-      throw new CmsError('internal', `GitHub ${method} ${path.split('?')[0]} failed: ${res.status} ${(await res.text()).slice(0, 200)}`);
+      throw new CmsError('internal', `GitHub ${where} failed: ${res.status} ${(await res.text()).slice(0, 200)}`);
     }
-    return { status: res.status, data: (await res.json()) as T };
+    let data: T;
+    try {
+      data = (await res.json()) as T;
+    } catch (err) {
+      throw transient(`GitHub ${where} answered ${res.status} with an unreadable body: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    return { status: res.status, data };
   }
 
   async function blobSha(path: string, ref: string): Promise<string | null> {
@@ -175,31 +250,65 @@ export function createGithubAdapter(options: GithubAdapterOptions): ContentAdapt
 
     const tree = [];
     for (const f of input.files) {
-      const blob = await call<{ sha: string }>('POST', '/git/blobs', {
-        content: f.content.data,
-        encoding: f.content.encoding === 'base64' ? 'base64' : 'utf-8',
-      });
+      // Blobs and trees are content-addressed: repeating the request is harmless.
+      const blob = await call<{ sha: string }>(
+        'POST',
+        '/git/blobs',
+        { content: f.content.data, encoding: f.content.encoding === 'base64' ? 'base64' : 'utf-8' },
+        { retry: true },
+      );
       tree.push({ path: repoPath(f.path), mode: '100644', type: 'blob', sha: blob.data!.sha });
     }
-    const newTree = await call<{ sha: string }>('POST', '/git/trees', {
-      base_tree: headCommit.data.tree.sha,
-      tree,
-    });
+    const newTree = await call<{ sha: string }>(
+      'POST',
+      '/git/trees',
+      { base_tree: headCommit.data.tree.sha, tree },
+      { retry: true },
+    );
     const now = new Date().toISOString();
-    const commit = await call<{ sha: string; html_url?: string }>('POST', '/git/commits', {
-      message: input.message,
-      tree: newTree.data!.sha,
-      parents: [head],
-      ...(input.author ? { author: { ...input.author, date: now } } : {}),
-    });
-    await call('PATCH', `/git/refs/heads/${encodeURIComponent(options.branch)}`, {
-      sha: commit.data!.sha,
-      force: false,
-    });
+    // A repeated commit request at worst leaves an unreferenced commit object behind.
+    const commit = await call<{ sha: string; html_url?: string }>(
+      'POST',
+      '/git/commits',
+      {
+        message: input.message,
+        tree: newTree.data!.sha,
+        parents: [head],
+        ...(input.author ? { author: { ...input.author, date: now } } : {}),
+        ...(options.committer ? { committer: { ...options.committer, date: now } } : {}),
+      },
+      { retry: true },
+    );
+    const sha = commit.data!.sha;
+    await moveBranch(head, sha);
     return {
-      revision: commit.data!.sha,
+      revision: sha,
       ...(commit.data!.html_url ? { url: commit.data!.html_url } : {}),
     };
+  }
+
+  /**
+   * Fast-forward the branch from `head` to `sha`. When GitHub gives no
+   * definite answer, the branch is read back: at `sha`, the commit landed;
+   * still at `head`, the update is tried again; elsewhere, someone else
+   * pushed meanwhile (the commit is rebuilt on the new head).
+   */
+  async function moveBranch(head: string, sha: string): Promise<void> {
+    const refPath = `/git/refs/heads/${encodeURIComponent(options.branch)}`;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        await call('PATCH', refPath, { sha, force: false }, { retry: false });
+        return;
+      } catch (err) {
+        if (!isTransient(err)) throw err;
+        if (attempt > retries) throw err;
+        await sleep(retryDelayMs * 2 ** (attempt - 1));
+        const now = await call<{ object: { sha: string } }>('GET', `/git/ref/heads/${encodeURIComponent(options.branch)}`);
+        const at = now.data?.object.sha;
+        if (at === sha) return;
+        if (at !== head) throw NOT_FAST_FORWARD;
+      }
+    }
   }
 
   async function commit(input: CommitInput): Promise<CommitResult> {

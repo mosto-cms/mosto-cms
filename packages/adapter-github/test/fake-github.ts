@@ -6,7 +6,14 @@
 import { createHash, createVerify } from 'node:crypto';
 
 type Tree = Map<string, string>; // path -> blob sha
-type Commit = { sha: string; tree: string; parents: string[]; message: string; author: { name: string; email: string; date: string } };
+type Commit = {
+  sha: string;
+  tree: string;
+  parents: string[];
+  message: string;
+  author: { name: string; email: string; date: string };
+  committer: { name: string; email: string };
+};
 
 export class FakeGithub {
   blobs = new Map<string, Buffer>();
@@ -17,6 +24,12 @@ export class FakeGithub {
   token = 'test-token';
   /** Called right before a ref update is applied (to simulate races). */
   beforeRefUpdate?: () => void;
+  /**
+   * Fault injection: called for every request before it is served. Return a
+   * Response to answer with it instead ('after' answers AFTER the request was
+   * applied, like a lost or failed answer), or throw to simulate no answer.
+   */
+  fault?: (call: string) => { when: 'before' | 'after'; response: Response } | { when: 'before'; throws: Error } | undefined;
   appPublicKey?: string;
   private clock = 0;
 
@@ -42,11 +55,18 @@ export class FakeGithub {
     return sha;
   }
 
-  private putCommit(tree: string, parents: string[], message: string, author?: { name: string; email: string }): string {
+  private putCommit(
+    tree: string,
+    parents: string[],
+    message: string,
+    author?: { name: string; email: string },
+    committer?: { name: string; email: string },
+  ): string {
     const date = new Date(Date.UTC(2026, 10, 2, 12, 0, ++this.clock)).toISOString();
     const a = { name: author?.name ?? 'dev', email: author?.email ?? 'dev@example.com', date };
+    const c = committer ? { name: committer.name, email: committer.email } : { name: a.name, email: a.email };
     const sha = this.sha('commit', `${tree}${parents.join()}${message}${date}`);
-    this.commits.set(sha, { sha, tree, parents, message, author: a });
+    this.commits.set(sha, { sha, tree, parents, message, author: a, committer: c });
     return sha;
   }
 
@@ -100,6 +120,15 @@ export class FakeGithub {
   }
 
   fetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    const method = (init?.method ?? 'GET').toUpperCase();
+    const fault = this.fault?.(`${method} ${new URL(String(input)).pathname}`);
+    if (fault && 'throws' in fault) throw fault.throws;
+    if (fault?.when === 'before') return fault.response;
+    const res = await this.serve(input, init);
+    return fault?.when === 'after' ? fault.response : res;
+  };
+
+  private serve = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     const url = new URL(String(input));
     const method = (init?.method ?? 'GET').toUpperCase();
     const auth = String((init?.headers as Record<string, string>)?.Authorization ?? '');
@@ -152,7 +181,7 @@ export class FakeGithub {
       return this.json(201, { sha: this.putTree(tree) });
     }
     if (method === 'POST' && rest === '/git/commits') {
-      const sha = this.putCommit(body.tree, body.parents, body.message, body.author);
+      const sha = this.putCommit(body.tree, body.parents, body.message, body.author, body.committer);
       return this.json(201, { sha, html_url: `https://github.example/commit/${sha}` });
     }
     if (method === 'PATCH' && (m = rest.match(/^\/git\/refs\/heads\/(.+)$/))) {

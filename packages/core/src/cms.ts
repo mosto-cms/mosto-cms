@@ -287,11 +287,14 @@ export function createCms(options: CmsOptions) {
   async function applyChanges(changes: Change[], ignoreBefore = false): Promise<{
     results: ChangeResult[];
     loaded: Map<string, Loaded>;
+    /** Changes whose `before` no longer matched because the field already holds the new value. */
+    alreadyApplied: number;
   }> {
     if (changes.length === 0) throw new CmsError('bad_request', 'no changes given');
     const seen = new Set<string>();
     const loaded = new Map<string, Loaded>();
     const results: ChangeResult[] = [];
+    let alreadyApplied = 0;
 
     for (const ch of changes) {
       const c = collectionOrThrow(ch.collection);
@@ -309,6 +312,22 @@ export function createCms(options: CmsOptions) {
       const entry = findEntry(c, l.doc, ch.id);
       const current = getByPath(entry, ch.path);
       if (!ignoreBefore && ch.before !== undefined && !jsonEqual(current, ch.before)) {
+        // The field already holds the requested value: the same publish landed
+        // before (a retry after a lost answer) or someone made the same edit.
+        // Nothing to write and nothing to refuse, so retries are idempotent.
+        if (jsonEqual(current, ch.value)) {
+          alreadyApplied++;
+          results.push({
+            collection: c.key,
+            id: ch.id,
+            path: ch.path,
+            kind: field.kind,
+            before: (current ?? null) as FieldValue | null,
+            after: ch.value,
+            changed: false,
+          });
+          continue;
+        }
         throw new CmsError('conflict', `${key} changed since it was read`, {
           field: key,
           expected: ch.before,
@@ -326,7 +345,7 @@ export function createCms(options: CmsOptions) {
         changed: !jsonEqual(current, ch.value),
       });
     }
-    return { results, loaded };
+    return { results, loaded, alreadyApplied };
   }
 
   async function previewChange(input: { changes: Change[] }): Promise<{
@@ -347,6 +366,8 @@ export function createCms(options: CmsOptions) {
     baseRevisions?: Record<string, string>;
   }): Promise<{
     published: boolean;
+    /** True when nothing was committed because every change was already live (e.g. a retry). */
+    alreadyPublished?: boolean;
     revision: string | null;
     url?: string;
     files: string[];
@@ -356,7 +377,7 @@ export function createCms(options: CmsOptions) {
     const message = (input.message ?? '').trim() || 'Update content via Mosto CMS';
 
     const attempt = async () => {
-      const { results, loaded } = await applyChanges(input.changes);
+      const { results, loaded, alreadyApplied } = await applyChanges(input.changes);
       const files: FileChange[] = [];
       for (const [file, l] of loaded) {
         const strict = input.baseRevisions?.[file];
@@ -376,7 +397,13 @@ export function createCms(options: CmsOptions) {
         });
       }
       if (files.length === 0) {
-        return { published: false, revision: null, files: [], changes: results };
+        return {
+          published: false,
+          ...(alreadyApplied > 0 ? { alreadyPublished: true } : {}),
+          revision: null,
+          files: [],
+          changes: results,
+        };
       }
       const commit = await adapter.commit({
         message: message.slice(0, 200),

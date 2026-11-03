@@ -187,6 +187,40 @@ export function buildChanges(drafts: Drafts): Change[] {
   return [...merged.values()];
 }
 
+/**
+ * The entries as they are after `published` went live: each published value
+ * written into the cached entry, so the editor sees the result at once without
+ * reading the site again (that read may fail or lag right after a commit).
+ * Entries not loaded yet are left out; they are read on demand.
+ */
+export function withPublished(entries: Record<string, EntryData>, published: Drafts): Record<string, EntryData> {
+  const next = { ...entries };
+  for (const d of Object.values(published)) {
+    const key = entryKey(d.collection, d.id);
+    const e = next[key];
+    if (!e) continue;
+    const fields = { ...e.fields };
+    const m = /^(.+)\.(\d+)$/.exec(d.path);
+    const parent = m ? fields[m[1] as string] : undefined;
+    if (!(d.path in fields) && m && Array.isArray(parent) && typeof d.value === 'string') {
+      const list = [...parent];
+      list[Number(m[2])] = d.value;
+      fields[m[1] as string] = list;
+    } else {
+      fields[d.path] = d.value;
+    }
+    next[key] = { ...e, fields };
+  }
+  return next;
+}
+
+/** True when `entry` (read from the site) already shows every published value of its entry. */
+export function showsPublished(entry: EntryData, collection: string, id: string, published: Drafts): boolean {
+  return Object.values(published)
+    .filter((d) => d.collection === collection && d.id === id)
+    .every((d) => jsonEqual(storedValue(entry, d.path), d.value));
+}
+
 /** A short commit message for non-technical readers: "Headline, Hero image (Home page)". */
 export function publishMessage(drafts: Drafts, collections: CollectionInfo[], uiLang: string, locales: string[], fallback: string): string {
   const parts: string[] = [];

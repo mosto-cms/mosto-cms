@@ -283,3 +283,99 @@ describe('github adapter: rootDir (monorepos)', () => {
     ).toThrow(/unsafe rootDir/);
   });
 });
+
+describe('github adapter: GitHub slow or briefly down', () => {
+  const resilient = (gh: FakeGithub, extra: Partial<Parameters<typeof createGithubAdapter>[0]> = {}) =>
+    createGithubAdapter({ owner: 'acme', repo: 'site', branch: 'main', auth: { token: gh.token }, fetch: gh.fetch, retryDelayMs: 0, ...extra });
+  const status = (n: number) => new Response(JSON.stringify({ message: `status ${n}` }), { status: n });
+
+  it('retries a read after a 502 or no answer, then succeeds', async () => {
+    const { gh } = setup();
+    let failures = 2;
+    gh.fault = (c) => {
+      if (!c.startsWith('GET') || failures === 0) return undefined;
+      failures--;
+      return failures === 1 ? { when: 'before', response: status(502) } : { when: 'before', throws: new TypeError('fetch failed') };
+    };
+    expect((await resilient(gh).readFile('data/tours.json'))?.text).toBe(TOURS);
+  });
+
+  it('gives up after the retries with an internal error naming the request', async () => {
+    const { gh } = setup();
+    gh.fault = () => ({ when: 'before', response: status(503) });
+    await expect(resilient(gh).readFile('data/tours.json')).rejects.toMatchObject({
+      code: 'internal',
+      message: expect.stringMatching(/GitHub GET .*contents.* failed: 503/),
+    });
+  });
+
+  it('times out a request that never answers', async () => {
+    const { gh } = setup();
+    const hang: typeof fetch = (_input, init) =>
+      new Promise((_resolve, reject) => init?.signal?.addEventListener('abort', () => reject(init.signal!.reason)));
+    const adapter = resilient(gh, { fetch: hang, requestTimeoutMs: 20, retries: 1 });
+    await expect(adapter.readFile('data/tours.json')).rejects.toMatchObject({ code: 'internal', message: expect.stringMatching(/did not answer/) });
+  });
+
+  it('a commit whose branch update answered 502 but landed is a success, committed once', async () => {
+    const { gh } = setup();
+    const before = gh.head()!;
+    gh.fault = (c) => (c.startsWith('PATCH') ? { when: 'after', response: status(502) } : undefined);
+    const r = await resilient(gh).commit({ message: 'edit', files: [{ path: 'data/tours.json', content: { encoding: 'utf8', data: '[1]\n' } }] });
+    expect(gh.head()).toBe(r.revision);
+    expect(gh.commits.get(r.revision)!.parents).toEqual([before]);
+    expect(gh.calls.filter((c) => c.startsWith('PATCH'))).toHaveLength(1);
+  });
+
+  it('a branch update that failed before landing is tried again', async () => {
+    const { gh } = setup();
+    let failed = false;
+    gh.fault = (c) => {
+      if (!c.startsWith('PATCH') || failed) return undefined;
+      failed = true;
+      return { when: 'before', response: status(500) };
+    };
+    const r = await resilient(gh).commit({ message: 'edit', files: [{ path: 'data/tours.json', content: { encoding: 'utf8', data: '[2]\n' } }] });
+    expect(gh.head()).toBe(r.revision);
+    expect(gh.fileAt('data/tours.json')).toBe('[2]\n');
+  });
+
+  it('a publish retried after a lost answer does not commit twice', async () => {
+    const { gh } = setup();
+    const adapter = resilient(gh);
+    const cms = createCms({ schema, adapter, author: { name: 'Editor', email: 'editor@example.com' } });
+    const change = { collection: 'tours', id: 'giro', path: 'price', value: '€ 130', before: '€ 120' };
+    gh.fault = (c) => (c.startsWith('PATCH') ? { when: 'after', response: status(504) } : undefined);
+    const first = await cms.publish({ changes: [change] }).catch((e: unknown) => e);
+    expect(first).toMatchObject({ published: true });
+    gh.fault = undefined;
+    const head = gh.head();
+    const again = await cms.publish({ changes: [change] });
+    expect(again).toMatchObject({ published: false, alreadyPublished: true });
+    expect(gh.head()).toBe(head);
+  });
+});
+
+describe('github adapter: committer', () => {
+  it('keeps the editor as author and commits as the configured committer', async () => {
+    const { gh } = setup();
+    const adapter = createGithubAdapter({
+      owner: 'acme',
+      repo: 'site',
+      branch: 'main',
+      auth: { token: gh.token },
+      fetch: gh.fetch,
+      committer: { name: 'Site bot', email: 'bot@example.com' },
+    });
+    const r = await adapter.commit({
+      message: 'edit',
+      author: { name: 'Editor', email: 'editor@example.com' },
+      files: [{ path: 'data/tours.json', content: { encoding: 'utf8', data: '[3]\n' } }],
+    });
+    const c = gh.commits.get(r.revision)!;
+    expect(c.author).toMatchObject({ name: 'Editor', email: 'editor@example.com' });
+    expect(c.committer).toEqual({ name: 'Site bot', email: 'bot@example.com' });
+    const history = await adapter.history!({ paths: ['data/tours.json'], limit: 5 });
+    expect(history[0]!.author).toEqual({ name: 'Editor', email: 'editor@example.com' });
+  });
+});

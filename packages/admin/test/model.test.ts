@@ -15,8 +15,10 @@ import {
   publishMessage,
   siblingPaths,
   splitLocale,
+  showsPublished,
   storedValue,
   withDraft,
+  withPublished,
   type CollectionInfo,
   type Draft,
   type Drafts,
@@ -171,5 +173,26 @@ describe('i18n', () => {
     expect(relativeTime('2026-11-02T11:58:00Z', 'en', now)).toBe('2 min ago');
     expect(relativeTime('2026-11-02T09:00:00Z', 'it', now)).toBe('3 ore fa');
     expect(relativeTime('2026-11-01T09:00:00Z', 'en', now)).toBe('yesterday');
+  });
+});
+
+describe('after a publish', () => {
+  const entries = { 'home:home': { revision: 'r1', fields: { 'en.title': 'Hello', gallery: ['/a.png', '/b.png'] } } };
+  const published = {
+    'home:home:en.title': { collection: 'home', id: 'home', path: 'en.title', kind: 'text' as const, value: 'Hi', before: 'Hello' },
+    'home:home:gallery.1': { collection: 'home', id: 'home', path: 'gallery.1', kind: 'image' as const, value: '/c.png', before: '/b.png' },
+    'other:x:title': { collection: 'other', id: 'x', path: 'title', kind: 'text' as const, value: 'Not loaded', before: null },
+  };
+
+  it('writes the published values into the cached entries, list items included', () => {
+    const next = withPublished(entries, published);
+    expect(next['home:home']!.fields).toEqual({ 'en.title': 'Hi', gallery: ['/a.png', '/c.png'] });
+    expect(next['other:x']).toBeUndefined();
+    expect(entries['home:home'].fields['en.title']).toBe('Hello');
+  });
+
+  it('accepts a fresh read only once it shows every published value', () => {
+    expect(showsPublished(entries['home:home'], 'home', 'home', published)).toBe(false);
+    expect(showsPublished(withPublished(entries, published)['home:home']!, 'home', 'home', published)).toBe(true);
   });
 });

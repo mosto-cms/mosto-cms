@@ -1,6 +1,6 @@
 {
   "name": "@mosto-cms/adapter-fs",
-  "version": "0.1.0-alpha.2",
+  "version": "0.1.0-alpha.3",
   "description": "Mosto CMS content adapter for the local file system, for development.",
   "license": "MIT",
   "type": "module",
